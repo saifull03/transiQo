@@ -57,9 +57,18 @@ io.on('connection', (socket) => {
 
     // Rider accepts a ride
     socket.on('rideAccepted', (data) => {
-        const { rideId, userId, riderId } = data;
+        const { rideId, userId, riderId, riderInfo } = data;
         // Notify the specific user who requested the ride
-        io.to(userId).emit('rideAccepted', { rideId, riderId, message: 'A driver is on the way!' });
+        io.to(userId).emit('rideAccepted', { rideId, riderId, riderInfo, message: 'A driver is on the way!' });
+        
+        // Notify all other riders to remove the request from their screens
+        io.to('riders').emit('removeRideRequest', { rideId });
+    });
+
+    // Rider starts the ride
+    socket.on('rideStarted', (data) => {
+        const { rideId, userId, startedAt } = data;
+        io.to(userId).emit('rideStarted', { rideId, startedAt, message: 'Ride has started!' });
     });
 
     // Rider completes the ride

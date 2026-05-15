@@ -67,7 +67,7 @@ const History = () => {
                     {ride.status}
                   </span>
                   <div className="text-right mt-2">
-                    <div className="text-2xl font-black text-gray-800 dark:text-white">${ride.fare}</div>
+                    <div className="text-2xl font-black text-gray-800 dark:text-white">৳{ride.fare}</div>
                     <div className="text-xs text-gray-500 dark:text-gray-400">{ride.distance} km</div>
                   </div>
                 </div>

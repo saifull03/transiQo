@@ -68,6 +68,10 @@ const updateRideStatus = async (req, res) => {
       ride.rider = req.user._id;
     }
 
+    if (status === 'started') {
+      ride.startedAt = Date.now();
+    }
+
     ride.status = status;
     const updatedRide = await ride.save();
 
