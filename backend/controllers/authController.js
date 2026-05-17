@@ -1,6 +1,6 @@
-const User = require('../models/User');
-const Rider = require('../models/Rider');
-const generateToken = require('../utils/generateToken');
+const User = require("../models/User");
+const Rider = require("../models/Rider");
+const generateToken = require("../utils/generateToken");
 
 // @desc    Register a new user
 // @route   POST /api/auth/register/user
@@ -11,7 +11,7 @@ const registerUser = async (req, res) => {
   const userExists = await User.findOne({ email });
 
   if (userExists) {
-    return res.status(400).json({ message: 'User already exists' });
+    return res.status(400).json({ message: "User already exists" });
   }
 
   const user = await User.create({
@@ -32,7 +32,7 @@ const registerUser = async (req, res) => {
       token: generateToken(user._id, user.role),
     });
   } else {
-    res.status(400).json({ message: 'Invalid user data' });
+    res.status(400).json({ message: "Invalid user data" });
   }
 };
 
@@ -45,7 +45,7 @@ const registerRider = async (req, res) => {
   const riderExists = await Rider.findOne({ email });
 
   if (riderExists) {
-    return res.status(400).json({ message: 'Rider already exists' });
+    return res.status(400).json({ message: "Rider already exists" });
   }
 
   const rider = await Rider.create({
@@ -63,12 +63,12 @@ const registerRider = async (req, res) => {
       email: rider.email,
       phone: rider.phone,
       vehicle: rider.vehicle,
-      role: 'rider',
+      role: "rider",
       profilePicture: rider.profilePicture,
-      token: generateToken(rider._id, 'rider'),
+      token: generateToken(rider._id, "rider"),
     });
   } else {
-    res.status(400).json({ message: 'Invalid rider data' });
+    res.status(400).json({ message: "Invalid rider data" });
   }
 };
 
@@ -78,7 +78,7 @@ const registerRider = async (req, res) => {
 const login = async (req, res) => {
   const { email, password, type } = req.body; // type can be 'user' or 'rider'
 
-  if (type === 'rider') {
+  if (type === "rider") {
     const rider = await Rider.findOne({ email });
 
     if (rider && (await rider.matchPassword(password))) {
@@ -88,15 +88,15 @@ const login = async (req, res) => {
         email: rider.email,
         phone: rider.phone,
         vehicle: rider.vehicle,
-        role: 'rider',
+        role: "rider",
         profilePicture: rider.profilePicture,
         isOnline: rider.isOnline,
         rating: rider.rating,
         earnings: rider.earnings,
-        token: generateToken(rider._id, 'rider'),
+        token: generateToken(rider._id, "rider"),
       });
     } else {
-      res.status(401).json({ message: 'Invalid email or password' });
+      res.status(401).json({ message: "Invalid email or password" });
     }
   } else {
     const user = await User.findOne({ email });
@@ -112,7 +112,7 @@ const login = async (req, res) => {
         token: generateToken(user._id, user.role),
       });
     } else {
-      res.status(401).json({ message: 'Invalid email or password' });
+      res.status(401).json({ message: "Invalid email or password" });
     }
   }
 };
@@ -126,7 +126,7 @@ const getProfile = async (req, res) => {
   if (user) {
     res.json(user);
   } else {
-    res.status(404).json({ message: 'User not found' });
+    res.status(404).json({ message: "User not found" });
   }
 };
 
@@ -142,12 +142,12 @@ const updateRiderStatus = async (req, res) => {
     if (rider) {
       rider.isOnline = isOnline;
       await rider.save();
-      res.json({ message: 'Status updated', isOnline: rider.isOnline });
+      res.json({ message: "Status updated", isOnline: rider.isOnline });
     } else {
-      res.status(404).json({ message: 'Rider not found' });
+      res.status(404).json({ message: "Rider not found" });
     }
   } catch (error) {
-    res.status(500).json({ message: 'Server Error' });
+    res.status(500).json({ message: "Server Error" });
   }
 };
 
@@ -158,30 +158,35 @@ const updateProfilePicture = async (req, res) => {
   const { profilePicture } = req.body;
 
   if (!profilePicture) {
-    return res.status(400).json({ message: 'No image data provided' });
+    return res.status(400).json({ message: "No image data provided" });
   }
 
   // Validate it's a base64 image (basic check)
-  if (!profilePicture.startsWith('data:image/')) {
-    return res.status(400).json({ message: 'Invalid image format. Must be base64 data URI.' });
+  if (!profilePicture.startsWith("data:image/")) {
+    return res
+      .status(400)
+      .json({ message: "Invalid image format. Must be base64 data URI." });
   }
 
   try {
-    const Model = req.user.role === 'rider' ? Rider : User;
+    const Model = req.user.role === "rider" ? Rider : User;
     const updated = await Model.findByIdAndUpdate(
       req.user._id,
       { profilePicture },
-      { new: true }
-    ).select('-password');
+      { new: true },
+    ).select("-password");
 
     if (!updated) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({ message: "User not found" });
     }
 
-    res.json({ profilePicture: updated.profilePicture, message: 'Profile picture updated successfully' });
+    res.json({
+      profilePicture: updated.profilePicture,
+      message: "Profile picture updated successfully",
+    });
   } catch (error) {
-    console.error('Error updating profile picture:', error);
-    res.status(500).json({ message: 'Server Error' });
+    console.error("Error updating profile picture:", error);
+    res.status(500).json({ message: "Server Error" });
   }
 };
 
@@ -192,19 +197,17 @@ const updateProfile = async (req, res) => {
   const { name, phone } = req.body;
 
   try {
-    const Model = req.user.role === 'rider' ? Rider : User;
+    const Model = req.user.role === "rider" ? Rider : User;
     const updateData = {};
     if (name) updateData.name = name;
     if (phone) updateData.phone = phone;
 
-    const updated = await Model.findByIdAndUpdate(
-      req.user._id,
-      updateData,
-      { new: true }
-    ).select('-password');
+    const updated = await Model.findByIdAndUpdate(req.user._id, updateData, {
+      new: true,
+    }).select("-password");
 
     if (!updated) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({ message: "User not found" });
     }
 
     res.json({
@@ -214,13 +217,46 @@ const updateProfile = async (req, res) => {
       phone: updated.phone,
       role: updated.role,
       profilePicture: updated.profilePicture,
-      ...(updated.role === 'rider' && { vehicle: updated.vehicle, rating: updated.rating, earnings: updated.earnings }),
-      message: 'Profile updated successfully',
+      ...(updated.role === "rider" && {
+        vehicle: updated.vehicle,
+        rating: updated.rating,
+        earnings: updated.earnings,
+      }),
+      message: "Profile updated successfully",
     });
   } catch (error) {
-    console.error('Error updating profile:', error);
-    res.status(500).json({ message: 'Server Error' });
+    console.error("Error updating profile:", error);
+    res.status(500).json({ message: "Server Error" });
   }
 };
 
-module.exports = { registerUser, registerRider, login, getProfile, updateRiderStatus, updateProfilePicture, updateProfile };
+// @desc    Get public rider profile by ID
+// @route   GET /api/auth/rider/:id
+// @access  Private
+const getRiderById = async (req, res) => {
+  try {
+    const rider = await Rider.findById(req.params.id).select(
+      "name phone rating vehicle profilePicture",
+    );
+
+    if (!rider) {
+      return res.status(404).json({ message: "Rider not found" });
+    }
+
+    res.json(rider);
+  } catch (error) {
+    console.error("Error fetching rider profile:", error);
+    res.status(500).json({ message: "Server Error" });
+  }
+};
+
+module.exports = {
+  registerUser,
+  registerRider,
+  login,
+  getProfile,
+  updateRiderStatus,
+  updateProfilePicture,
+  updateProfile,
+  getRiderById,
+};

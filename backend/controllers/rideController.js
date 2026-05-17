@@ -1,14 +1,15 @@
-const Ride = require('../models/Ride');
-const Rider = require('../models/Rider');
+const Ride = require("../models/Ride");
+const Rider = require("../models/Rider");
 
 // @desc    Request a new ride
 // @route   POST /api/rides/request
 // @access  Private (User only)
 const requestRide = async (req, res) => {
-  const { pickupLocation, dropoffLocation, distance, duration, fare } = req.body;
+  const { pickupLocation, dropoffLocation, distance, duration, fare } =
+    req.body;
 
   if (!pickupLocation || !dropoffLocation || !distance || !fare) {
-    return res.status(400).json({ message: 'Please provide all ride details' });
+    return res.status(400).json({ message: "Please provide all ride details" });
   }
 
   try {
@@ -19,7 +20,7 @@ const requestRide = async (req, res) => {
       distance,
       duration,
       fare,
-      status: 'requested',
+      status: "requested",
     });
 
     // Here we will emit socket event to broadcast the ride to nearby riders later
@@ -27,7 +28,7 @@ const requestRide = async (req, res) => {
     res.status(201).json(ride);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Server Error' });
+    res.status(500).json({ message: "Server Error" });
   }
 };
 
@@ -37,14 +38,18 @@ const requestRide = async (req, res) => {
 const getRideHistory = async (req, res) => {
   try {
     let rides;
-    if (req.user.role === 'rider') {
-      rides = await Ride.find({ rider: req.user._id }).populate('user', 'name phone').sort({ createdAt: -1 });
+    if (req.user.role === "rider") {
+      rides = await Ride.find({ rider: req.user._id })
+        .populate("user", "name phone")
+        .sort({ createdAt: -1 });
     } else {
-      rides = await Ride.find({ user: req.user._id }).populate('rider', 'name vehicle').sort({ createdAt: -1 });
+      rides = await Ride.find({ user: req.user._id })
+        .populate("rider", "name vehicle")
+        .sort({ createdAt: -1 });
     }
     res.json(rides);
   } catch (error) {
-    res.status(500).json({ message: 'Server Error' });
+    res.status(500).json({ message: "Server Error" });
   }
 };
 
@@ -56,19 +61,19 @@ const updateRideStatus = async (req, res) => {
   const ride = await Ride.findById(req.params.id);
 
   if (!ride) {
-    return res.status(404).json({ message: 'Ride not found' });
+    return res.status(404).json({ message: "Ride not found" });
   }
 
   try {
     // If a rider is accepting the ride, bind the rider ID to the ride
-    if (status === 'accepted') {
-      if (ride.status !== 'requested') {
-        return res.status(400).json({ message: 'Ride is no longer available' });
+    if (status === "accepted") {
+      if (ride.status !== "requested") {
+        return res.status(400).json({ message: "Ride is no longer available" });
       }
       ride.rider = req.user._id;
     }
 
-    if (status === 'started') {
+    if (status === "started") {
       ride.startedAt = Date.now();
     }
 
@@ -77,7 +82,7 @@ const updateRideStatus = async (req, res) => {
 
     res.json(updatedRide);
   } catch (error) {
-    res.status(500).json({ message: 'Server Error' });
+    res.status(500).json({ message: "Server Error" });
   }
 };
 
@@ -88,16 +93,93 @@ const confirmPayment = async (req, res) => {
   const ride = await Ride.findById(req.params.id);
 
   if (!ride) {
-    return res.status(404).json({ message: 'Ride not found' });
+    return res.status(404).json({ message: "Ride not found" });
   }
 
   try {
-    ride.paymentStatus = 'completed';
+    const { transactionId, fareBreakdown } = req.body || {};
+    ride.paymentStatus = "completed";
+    if (transactionId) ride.transactionId = transactionId;
+    if (fareBreakdown) ride.fareBreakdown = fareBreakdown;
+    if (!ride.receiptGeneratedAt) ride.receiptGeneratedAt = Date.now();
+
     const updatedRide = await ride.save();
+
+    // Add fare to rider earnings
+    if (ride.rider) {
+      await Rider.findByIdAndUpdate(ride.rider, {
+        $inc: { earnings: ride.fare },
+      });
+    }
+
     res.json(updatedRide);
   } catch (error) {
-    res.status(500).json({ message: 'Server Error' });
+    res.status(500).json({ message: "Server Error" });
   }
 };
 
-module.exports = { requestRide, getRideHistory, updateRideStatus, confirmPayment };
+// @desc    Get receipt data for a ride
+// @route   GET /api/rides/:id/receipt
+// @access  Private (user/rider/admin role-based)
+const getReceipt = async (req, res) => {
+  try {
+    const ride = await Ride.findById(req.params.id)
+      .populate("user", "name email phone")
+      .populate("rider", "name vehicle rating phone");
+
+    if (!ride) return res.status(404).json({ message: "Ride not found" });
+
+    // Authorization: users can access their rides, riders can access assigned rides, admins can access all
+    const requester = req.user;
+    if (
+      requester.role === "user" &&
+      String(ride.user._id || ride.user) !== String(requester._id)
+    ) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+    if (
+      requester.role === "rider" &&
+      ride.rider &&
+      String(ride.rider._id || ride.rider) !== String(requester._id)
+    ) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
+    // Build receipt payload
+    const receipt = {
+      rideId: ride._id,
+      transactionId: ride.transactionId || null,
+      receiptGeneratedAt: ride.receiptGeneratedAt || null,
+      createdAt: ride.createdAt,
+      pickup: ride.pickupLocation,
+      dropoff: ride.dropoffLocation,
+      distance: ride.distance,
+      duration: ride.duration,
+      rider: ride.rider || null,
+      user: ride.user || null,
+      paymentMethod: ride.paymentMethod || "cash",
+      paymentStatus: ride.paymentStatus || "pending",
+      fare: ride.fare,
+      fareBreakdown: ride.fareBreakdown || {
+        baseFare: 0,
+        distanceCharge: 0,
+        timeCharge: 0,
+        surgeCharge: 0,
+      },
+      status: ride.status,
+    };
+
+    res.json(receipt);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server Error" });
+  }
+};
+
+module.exports = {
+  requestRide,
+  getRideHistory,
+  updateRideStatus,
+  confirmPayment,
+  getReceipt,
+};

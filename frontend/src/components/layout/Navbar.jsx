@@ -1,4 +1,4 @@
-import { useContext, useState } from 'react';
+import { useContext, useState, useRef, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 
@@ -7,6 +7,18 @@ const Navbar = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handler = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -19,7 +31,7 @@ const Navbar = () => {
   const defaultAvatar = 'https://icon-library.com/images/anonymous-avatar-icon/anonymous-avatar-icon-25.jpg';
 
   return (
-    <nav className="bg-gray-900/95 backdrop-blur-xl shadow-2xl sticky top-0 z-50 border-b border-white/5">
+    <nav className="bg-gray-900/95 backdrop-blur-xl shadow-2xl sticky top-0 z-[9999] border-b border-white/5">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
@@ -69,7 +81,7 @@ const Navbar = () => {
                 </Link>
 
                 {/* Profile dropdown */}
-                <div className="relative ml-2">
+                <div className="relative ml-2" ref={dropdownRef}>
                   <button
                     onClick={() => setMenuOpen(!menuOpen)}
                     className="flex items-center gap-3 pl-2 pr-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 transition-all border border-white/10"
@@ -90,7 +102,7 @@ const Navbar = () => {
                   </button>
 
                   {menuOpen && (
-                    <div className="absolute right-0 mt-2 w-52 bg-gray-800 rounded-2xl shadow-2xl border border-white/10 overflow-hidden z-50 animate-fade-in">
+                    <div className="absolute right-0 mt-2 w-56 bg-gray-800 rounded-2xl shadow-2xl border border-white/10 z-[9999] animate-fade-in">
                       <div className="p-3 border-b border-white/10">
                         <p className="text-white font-semibold text-sm truncate">{user.name}</p>
                         <p className="text-gray-400 text-xs truncate">{user.email}</p>
