@@ -63,7 +63,7 @@ io.on("connection", (socket) => {
     let resolvedRiderInfo = riderInfo || {};
     try {
       const rider = await Rider.findById(riderId).select(
-        "name phone rating vehicle",
+        "name phone rating vehicle profilePicture",
       );
       if (rider) {
         resolvedRiderInfo = {
@@ -71,6 +71,7 @@ io.on("connection", (socket) => {
           phone: rider.phone || "N/A",
           rating: rider.rating ?? 5.0,
           vehicle: rider.vehicle,
+          profilePicture: rider.profilePicture,
         };
       }
     } catch (err) {

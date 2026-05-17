@@ -111,8 +111,12 @@ const RiderPanel = ({
                     </p>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold">
-                          {activeRide.userInfo.name?.[0]?.toUpperCase()}
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold overflow-hidden border border-white/20 flex-shrink-0 shadow-md">
+                          {activeRide.userInfo.profilePicture ? (
+                            <img src={activeRide.userInfo.profilePicture} alt={activeRide.userInfo.name} className="w-full h-full object-cover" />
+                          ) : (
+                            activeRide.userInfo.name?.[0]?.toUpperCase()
+                          )}
                         </div>
                         <div>
                           <p className="text-white font-bold">

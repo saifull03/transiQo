@@ -12,7 +12,7 @@ const DEFAULT_AVATAR =
   "https://icon-library.com/images/anonymous-avatar-icon/anonymous-avatar-icon-25.jpg";
 
 const Dashboard = () => {
-  const { user } = useContext(AuthContext);
+  const { user, updateUser } = useContext(AuthContext);
 
   // Shared state
   const [socket, setSocket] = useState(null);
@@ -33,9 +33,15 @@ const Dashboard = () => {
   const [completedRideId, setCompletedRideId] = useState(null);
 
   // Rider-specific state
-  const [isOnline, setIsOnline] = useState(false);
+  const [isOnline, setIsOnline] = useState(user?.isOnline || false);
   const [incomingRequest, setIncomingRequest] = useState(null);
   const [activeRide, setActiveRide] = useState(null);
+
+  useEffect(() => {
+    if (user?.isOnline !== undefined) {
+      setIsOnline(user.isOnline);
+    }
+  }, [user]);
 
   // Timer
   const [rideStartTime, setRideStartTime] = useState(null);
@@ -211,7 +217,7 @@ const Dashboard = () => {
       setBookingStatus("Ride requested! Waiting for a driver...");
       socket?.emit("rideRequest", {
         ...data,
-        userInfo: { name: user.name, phone: user.phone || "N/A" },
+        userInfo: { name: user.name, phone: user.phone || "N/A", profilePicture: user.profilePicture },
       });
     } catch {
       setBookingStatus("Failed to request ride.");
@@ -229,6 +235,7 @@ const Dashboard = () => {
         authHeaders(),
       );
       setIsOnline(newStatus);
+      if (updateUser) updateUser({ isOnline: newStatus });
       if (socket && newStatus) socket.emit("join", "riders");
       if (!newStatus) setIncomingRequest(null);
     } catch (e) {
@@ -246,12 +253,13 @@ const Dashboard = () => {
       );
       socket?.emit("rideAccepted", {
         rideId: incomingRequest._id,
-        userId: incomingRequest.user,
+        userId: incomingRequest.user?._id || incomingRequest.user,
         riderId: user._id,
         riderInfo: {
           name: user.name,
           phone: user.phone || "N/A",
           rating: user.rating || 5.0,
+          profilePicture: user.profilePicture,
           vehicle: user.vehicle || {
             make: "Toyota",
             model: "Corolla",

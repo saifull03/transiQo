@@ -42,8 +42,11 @@ const RideMap = ({ onLocationsUpdate, onRouteCalculated, initialPickup, initialD
 
   // Sync with props
   useEffect(() => {
-    if (initialPickup) setPickup(initialPickup);
-    if (initialDestination) setDestination(initialDestination);
+    setPickup(initialPickup || null);
+    setDestination(initialDestination || null);
+    if (!initialPickup || !initialDestination) {
+      setRouteCoords([]);
+    }
   }, [initialPickup, initialDestination]);
 
   const tileLayers = {
@@ -54,7 +57,7 @@ const RideMap = ({ onLocationsUpdate, onRouteCalculated, initialPickup, initialD
   // Fetch Route from OSRM API
   useEffect(() => {
     const fetchRoute = async () => {
-      if (pickup && destination) {
+      if (pickup && destination && initialPickup && initialDestination) {
         try {
           const response = await axios.get(
             `https://router.project-osrm.org/route/v1/driving/${pickup.lng},${pickup.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson`
@@ -79,11 +82,14 @@ const RideMap = ({ onLocationsUpdate, onRouteCalculated, initialPickup, initialD
         }
       } else {
         setRouteCoords([]);
+        if (onRouteCalculated) {
+          onRouteCalculated(null);
+        }
       }
     };
 
     fetchRoute();
-  }, [pickup, destination, onRouteCalculated]);
+  }, [pickup, destination, initialPickup, initialDestination, onRouteCalculated]);
 
   const reverseGeocode = async (lat, lng) => {
     try {

@@ -112,8 +112,12 @@ const UserPanel = ({
             </p>
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold">
-                  {riderInfo.name?.[0]?.toUpperCase()}
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold overflow-hidden border border-white/20 flex-shrink-0 shadow-md">
+                  {riderInfo.profilePicture ? (
+                    <img src={riderInfo.profilePicture} alt={riderInfo.name} className="w-full h-full object-cover" />
+                  ) : (
+                    riderInfo.name?.[0]?.toUpperCase()
+                  )}
                 </div>
                 <div>
                   <p className="text-white font-bold leading-tight">
@@ -194,6 +198,8 @@ const UserPanel = ({
       {/* Map */}
       <div className="flex-1 min-h-[400px] lg:min-h-0 rounded-2xl overflow-hidden border border-white/10">
         <RideMap
+          initialPickup={pickup}
+          initialDestination={destination}
           onLocationsUpdate={onLocationsUpdate}
           onRouteCalculated={onRouteCalculated}
         />
