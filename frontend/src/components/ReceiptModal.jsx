@@ -57,18 +57,28 @@ const ReceiptModal = ({ rideId, autoAction, onClose }) => {
   }, [loading, receipt, autoAction]);
 
   const printReceipt = () => {
-    if (!containerRef.current) return;
+    if (!containerRef.current || !receipt) return;
     const printContents = containerRef.current.innerHTML;
 
-    // Remove any previous print iframe to ensure Chromium GTK picks up the new title for rider/subsequent receipts
-    const oldIframe = document.getElementById("receipt-print-iframe");
-    if (oldIframe && document.body.contains(oldIframe)) {
-      document.body.removeChild(oldIframe);
-    }
+    const invoiceName = `Transiqo-invoice-${receipt.transactionId || receipt.rideId}`;
 
-    // Create a pristine print iframe
+    // Temporarily update the main document title so Chromium/Chrome GTK print spooler picks it up
+    const originalTitle = document.title;
+    document.title = invoiceName;
+
+    // Clean up any previous print iframes from older print jobs
+    const oldIframes = document.querySelectorAll('iframe[id^="receipt-print-iframe"]');
+    oldIframes.forEach(f => {
+      if (document.body.contains(f)) {
+        document.body.removeChild(f);
+      }
+    });
+
+    // Create a pristine print iframe with a unique ID so GTK print spooler never reuses cached titles
+    const uniqueId = `receipt-print-iframe-${receipt.transactionId || receipt.rideId}-${Date.now()}`;
     const iframe = document.createElement("iframe");
-    iframe.id = "receipt-print-iframe";
+    iframe.id = uniqueId;
+    iframe.name = uniqueId;
     iframe.style.position = "fixed";
     iframe.style.right = "0";
     iframe.style.bottom = "0";
@@ -82,7 +92,7 @@ const ReceiptModal = ({ rideId, autoAction, onClose }) => {
     doc.write(`
       <html>
         <head>
-          <title>Transiqo-invoice-${receipt?.transactionId || receipt?.rideId || ''}</title>
+          <title>${invoiceName}</title>
           <style>
             @import url('https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css');
             body {
@@ -145,27 +155,26 @@ const ReceiptModal = ({ rideId, autoAction, onClose }) => {
     iframe.contentWindow.focus();
     setTimeout(() => {
       iframe.contentWindow.print();
-      // Listen for print dialog closure to explicitly restore parent window focus and cleanup
+      // Listen for print dialog closure to restore title and focus
       const restoreFocus = () => {
-        if (document.body.contains(iframe)) {
-          document.body.removeChild(iframe);
-        }
+        document.title = originalTitle;
         window.focus();
         if (document.activeElement) {
           document.activeElement.blur();
         }
       };
       iframe.contentWindow.onafterprint = restoreFocus;
-      // Backup focus restore
-      setTimeout(restoreFocus, 3000);
+      // Backup focus restore after 60 seconds in case onafterprint is delayed by Linux WM
+      setTimeout(restoreFocus, 60000);
     }, 500);
   };
 
   const downloadPdf = () => {
     if (!containerRef.current || !receipt) return;
+    const invoiceName = `Transiqo-invoice-${receipt.transactionId || receipt.rideId}`;
     const opt = {
       margin: 10,
-      filename: `Transiqo-invoice-${receipt.transactionId || receipt.rideId}.pdf`,
+      filename: `${invoiceName}.pdf`,
       image: { type: "jpeg", quality: 0.98 },
       html2canvas: { scale: 2, useCORS: true, logging: false },
       jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
