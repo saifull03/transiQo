@@ -2,6 +2,9 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import RideMap from "../Map/RideMap";
 
+const DEFAULT_AVATAR =
+  "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Crect%20width%3D%22100%22%20height%3D%22100%22%20fill%3D%22%233b82f6%22%2F%3E%3Cpath%20d%3D%22M50%2055c-11%200-30%206-30%2018v7h60v-7c0-12-19-18-30-18zm0-10c8.28%200%2015-6.72%2015-15S58.28%2015%2050%2015%2035%2021.72%2035%2030s6.72%2015%2015%2015z%22%20fill%3D%22%23ffffff%22%2F%3E%3C%2Fsvg%3E";
+
 const StarRow = ({ rating, size = "w-4 h-4" }) => (
   <div className="flex gap-0.5">
     {[1, 2, 3, 4, 5].map((s) => (
@@ -112,11 +115,12 @@ const RiderPanel = ({
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold overflow-hidden border border-white/20 flex-shrink-0 shadow-md">
-                          {activeRide.userInfo.profilePicture ? (
-                            <img src={activeRide.userInfo.profilePicture} alt={activeRide.userInfo.name} className="w-full h-full object-cover" />
-                          ) : (
-                            activeRide.userInfo.name?.[0]?.toUpperCase()
-                          )}
+                          <img
+                            src={activeRide.userInfo.profilePicture || DEFAULT_AVATAR}
+                            alt={activeRide.userInfo.name}
+                            className="w-full h-full object-cover"
+                            onError={(e) => { e.target.src = DEFAULT_AVATAR; }}
+                          />
                         </div>
                         <div>
                           <p className="text-white font-bold">

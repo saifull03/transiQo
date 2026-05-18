@@ -2,6 +2,8 @@ const User = require("../models/User");
 const Rider = require("../models/Rider");
 const generateToken = require("../utils/generateToken");
 
+const DEFAULT_AVATAR = 'data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Crect%20width%3D%22100%22%20height%3D%22100%22%20fill%3D%22%233b82f6%22%2F%3E%3Cpath%20d%3D%22M50%2055c-11%200-30%206-30%2018v7h60v-7c0-12-19-18-30-18zm0-10c8.28%200%2015-6.72%2015-15S58.28%2015%2050%2015%2035%2021.72%2035%2030s6.72%2015%2015%2015z%22%20fill%3D%22%23ffffff%22%2F%3E%3C%2Fsvg%3E';
+
 // @desc    Register a new user
 // @route   POST /api/auth/register/user
 // @access  Public
@@ -28,7 +30,7 @@ const registerUser = async (req, res) => {
       email: user.email,
       phone: user.phone,
       role: user.role,
-      profilePicture: user.profilePicture,
+      profilePicture: user.profilePicture || DEFAULT_AVATAR,
       token: generateToken(user._id, user.role),
     });
   } else {
@@ -64,7 +66,7 @@ const registerRider = async (req, res) => {
       phone: rider.phone,
       vehicle: rider.vehicle,
       role: "rider",
-      profilePicture: rider.profilePicture,
+      profilePicture: rider.profilePicture || DEFAULT_AVATAR,
       token: generateToken(rider._id, "rider"),
     });
   } else {
@@ -89,7 +91,7 @@ const login = async (req, res) => {
         phone: rider.phone,
         vehicle: rider.vehicle,
         role: "rider",
-        profilePicture: rider.profilePicture,
+        profilePicture: rider.profilePicture || DEFAULT_AVATAR,
         isOnline: rider.isOnline,
         rating: rider.rating,
         earnings: rider.earnings,
@@ -108,7 +110,7 @@ const login = async (req, res) => {
         email: user.email,
         phone: user.phone,
         role: user.role,
-        profilePicture: user.profilePicture,
+        profilePicture: user.profilePicture || DEFAULT_AVATAR,
         token: generateToken(user._id, user.role),
       });
     } else {
@@ -124,7 +126,9 @@ const getProfile = async (req, res) => {
   const user = req.user;
 
   if (user) {
-    res.json(user);
+    const userData = user.toObject ? user.toObject() : user;
+    userData.profilePicture = userData.profilePicture || DEFAULT_AVATAR;
+    res.json(userData);
   } else {
     res.status(404).json({ message: "User not found" });
   }
@@ -216,7 +220,7 @@ const updateProfile = async (req, res) => {
       email: updated.email,
       phone: updated.phone,
       role: updated.role,
-      profilePicture: updated.profilePicture,
+      profilePicture: updated.profilePicture || DEFAULT_AVATAR,
       ...(updated.role === "rider" && {
         vehicle: updated.vehicle,
         rating: updated.rating,
@@ -243,7 +247,9 @@ const getRiderById = async (req, res) => {
       return res.status(404).json({ message: "Rider not found" });
     }
 
-    res.json(rider);
+    const riderData = rider.toObject ? rider.toObject() : rider;
+    riderData.profilePicture = riderData.profilePicture || DEFAULT_AVATAR;
+    res.json(riderData);
   } catch (error) {
     console.error("Error fetching rider profile:", error);
     res.status(500).json({ message: "Server Error" });
