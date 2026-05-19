@@ -18,6 +18,14 @@ const protect = async (req, res, next) => {
         req.user = await User.findById(decoded.id).select('-password');
       }
       
+      if (!req.user) {
+        return res.status(401).json({ message: 'Not authorized, user not found' });
+      }
+
+      if (req.user.isBlocked) {
+        return res.status(403).json({ message: 'Account is blocked. Please contact support.' });
+      }
+      
       req.user.role = decoded.role; // Attach role to req.user
 
       next();

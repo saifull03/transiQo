@@ -16,6 +16,7 @@ const UserPanel = ({
   onLocationsUpdate,
   onRouteCalculated,
   onRequestRide,
+  onCancelRide,
 }) => {
   const rideActive = bookingStatus && !bookingStatus.includes("Failed");
 
@@ -105,6 +106,17 @@ const UserPanel = ({
               {bookingStatus}
             </div>
           </div>
+        )}
+
+        {/* Cancel button */}
+        {bookingStatus && !bookingStatus.includes("Failed") && !rideStartTime && (
+          <button
+            onClick={onCancelRide}
+            disabled={loading}
+            className="w-full py-3.5 rounded-2xl font-black text-white bg-red-500/95 hover:bg-red-600 hover:shadow-lg hover:shadow-red-500/20 active:translate-y-0 hover:-translate-y-0.5 disabled:translate-y-0 disabled:bg-gray-700 disabled:shadow-none transition-all cursor-pointer"
+          >
+            {loading ? "Cancelling..." : "🛑 Cancel Ride Request"}
+          </button>
         )}
 
         {/* Rider info */}

@@ -85,6 +85,22 @@ const updateRideStatus = async (req, res) => {
       ride.rider = req.user._id;
     }
 
+    if (status === "cancelled") {
+      if (ride.status !== "requested" && ride.status !== "accepted") {
+        return res.status(400).json({ message: "Ride cannot be cancelled at this stage" });
+      }
+      const io = req.app.get("socketio");
+      if (io) {
+        io.to("riders").emit("removeRideRequest", { rideId: String(ride._id) });
+        if (ride.rider) {
+          io.to(String(ride.rider)).emit("rideCancelled", {
+            rideId: String(ride._id),
+            message: "The passenger has cancelled this ride request.",
+          });
+        }
+      }
+    }
+
     if (status === "started") {
       ride.startedAt = Date.now();
     }

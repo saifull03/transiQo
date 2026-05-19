@@ -6,7 +6,7 @@ import { AuthContext } from '../context/AuthContext';
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [type, setType] = useState('user'); // 'user' or 'rider'
+  const [type, setType] = useState('user'); // 'user', 'rider', or 'admin'
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   
@@ -19,14 +19,25 @@ const Login = () => {
     setLoading(true);
 
     try {
+      const loginType = type === 'admin' ? 'user' : type;
       const { data } = await axios.post('http://localhost:5003/api/auth/login', {
         email,
         password,
-        type,
+        type: loginType,
       });
 
+      if (type === 'admin' && data.role !== 'admin') {
+        setError('Access denied. You do not have administrator privileges.');
+        setLoading(false);
+        return;
+      }
+
       login(data);
-      navigate('/dashboard');
+      if (data.role === 'admin') {
+        navigate('/admin');
+      } else {
+        navigate('/dashboard');
+      }
     } catch (err) {
       setError(err.response?.data?.message || 'Login failed. Please try again.');
     } finally {
@@ -71,6 +82,17 @@ const Login = () => {
               }`}
             >
               Driver
+            </button>
+            <button
+              type="button"
+              onClick={() => setType('admin')}
+              className={`px-4 py-2 rounded-full font-medium transition ${
+                type === 'admin' 
+                  ? 'bg-red-600 text-white shadow-md' 
+                  : 'bg-gray-200 text-gray-600 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300'
+              }`}
+            >
+              Admin
             </button>
           </div>
 

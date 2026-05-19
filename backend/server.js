@@ -10,7 +10,25 @@ const Rider = require("./models/Rider");
 dotenv.config();
 
 // Connect to database
-connectDB();
+connectDB().then(async () => {
+  try {
+    const User = require("./models/User");
+    const adminExists = await User.findOne({ email: "admin@ridex.com" });
+    if (!adminExists) {
+      const admin = new User({
+        name: "RideX Administrator",
+        email: "admin@ridex.com",
+        password: "admin123",
+        role: "admin",
+        phone: "1234567890",
+      });
+      await admin.save();
+      console.log("Admin account auto-seeded: admin@ridex.com / admin123");
+    }
+  } catch (err) {
+    console.error("Error auto-seeding admin:", err);
+  }
+});
 
 const app = express();
 const server = http.createServer(app);
@@ -19,6 +37,7 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: "*", methods: ["GET", "POST"] },
 });
+app.set("socketio", io);
 
 // Middleware
 app.use(cors());
@@ -29,10 +48,12 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 const authRoutes = require("./routes/authRoutes");
 const rideRoutes = require("./routes/rideRoutes");
 const reviewRoutes = require("./routes/reviewRoutes");
+const adminRoutes = require("./routes/adminRoutes");
 
 app.use("/api/auth", authRoutes);
 app.use("/api/rides", rideRoutes);
 app.use("/api/reviews", reviewRoutes);
+app.use("/api/admin", adminRoutes);
 
 // Basic route to check if server is running
 app.get("/", (req, res) => {
@@ -117,6 +138,20 @@ io.on("connection", (socket) => {
       rideId,
       message: "Payment successful!",
     });
+  });
+
+  // Ride is cancelled (either before acceptance or after acceptance but before start)
+  socket.on("rideCancelled", (data) => {
+    const { rideId, userId, riderId } = data;
+    console.log(`Ride ${rideId} cancelled by passenger ${userId}`);
+    
+    // Notify all riders to remove the request from their pool
+    io.to("riders").emit("removeRideRequest", { rideId });
+    
+    // If a rider had accepted, notify that specific rider
+    if (riderId) {
+      io.to(riderId).emit("rideCancelled", { rideId, message: "The passenger cancelled the ride request." });
+    }
   });
 
   // Broadcast rider's live location to the specific trip room

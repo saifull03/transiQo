@@ -83,6 +83,10 @@ const login = async (req, res) => {
   if (type === "rider") {
     const rider = await Rider.findOne({ email });
 
+    if (rider && rider.isBlocked) {
+      return res.status(403).json({ message: "Your account is blocked. Please contact support." });
+    }
+
     if (rider && (await rider.matchPassword(password))) {
       res.json({
         _id: rider._id,
@@ -95,6 +99,7 @@ const login = async (req, res) => {
         isOnline: rider.isOnline,
         rating: rider.rating,
         earnings: rider.earnings,
+        isBlocked: rider.isBlocked,
         token: generateToken(rider._id, "rider"),
       });
     } else {
@@ -102,6 +107,10 @@ const login = async (req, res) => {
     }
   } else {
     const user = await User.findOne({ email });
+
+    if (user && user.isBlocked) {
+      return res.status(403).json({ message: "Your account is blocked. Please contact support." });
+    }
 
     if (user && (await user.matchPassword(password))) {
       res.json({
@@ -111,6 +120,7 @@ const login = async (req, res) => {
         phone: user.phone,
         role: user.role,
         profilePicture: user.profilePicture || DEFAULT_AVATAR,
+        isBlocked: user.isBlocked,
         token: generateToken(user._id, user.role),
       });
     } else {

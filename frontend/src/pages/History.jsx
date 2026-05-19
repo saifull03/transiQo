@@ -85,14 +85,18 @@ const History = () => {
                 <div className="mt-4 md:mt-0 flex flex-col items-end justify-between">
                   <span
                     className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${
-                      ride.status === "completed"
+                      ride.status === "completed" && ride.paymentStatus === "completed"
                         ? "bg-green-100 text-green-700"
-                        : ride.status === "cancelled"
-                          ? "bg-red-100 text-red-700"
-                          : "bg-blue-100 text-blue-700"
+                        : ride.status === "completed" && ride.paymentStatus !== "completed"
+                          ? "bg-blue-100 text-blue-700 animate-pulse"
+                          : ride.status === "cancelled"
+                            ? "bg-red-100 text-red-700"
+                            : "bg-blue-100 text-blue-700"
                     }`}
                   >
-                    {ride.status}
+                    {ride.status === "completed" && ride.paymentStatus !== "completed"
+                      ? "in progress"
+                      : ride.status}
                   </span>
                   <div className="text-right mt-2">
                     <div className="text-2xl font-black text-gray-800 dark:text-white">
@@ -102,7 +106,7 @@ const History = () => {
                       {ride.distance} km
                     </div>
                     <div className="mt-3 flex items-center gap-2 justify-end">
-                      {ride.status === "completed" && (
+                      {ride.status === "completed" && ride.paymentStatus === "completed" && (
                         <>
                           <button
                             onClick={() =>

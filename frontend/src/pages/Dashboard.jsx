@@ -31,6 +31,7 @@ const Dashboard = () => {
   const [showReview, setShowReview] = useState(false);
   const [reviewData, setReviewData] = useState({ rating: 5, comment: "" });
   const [completedRideId, setCompletedRideId] = useState(null);
+  const [activeRideId, setActiveRideId] = useState(null);
 
   // Rider-specific state
   const [isOnline, setIsOnline] = useState(user?.isOnline || false);
@@ -76,10 +77,22 @@ const Dashboard = () => {
       if (user.role === "rider" && isOnline) setIncomingRequest(d);
     });
     s.on("removeRideRequest", (d) =>
-      setIncomingRequest((p) => (p?._id === d.rideId ? null : p)),
+      setIncomingRequest((p) => {
+        if (!p) return null;
+        const currentId = p._id || p.id;
+        return currentId === d.rideId ? null : p;
+      }),
     );
+    s.on("rideCancelled", (d) => {
+      if (user.role === "rider") {
+        setActiveRide(null);
+        setIncomingRequest(null);
+        alert(d.message || "The passenger has cancelled this ride request.");
+      }
+    });
     s.on("rideAccepted", async (d) => {
       if (user.role === "user") {
+        setActiveRideId(d.rideId);
         setBookingStatus("A driver is on the way!");
         if (d.riderId) {
           try {
@@ -108,6 +121,7 @@ const Dashboard = () => {
         setPaymentWaiting(true);
         setFare(d.fare);
         setRideStartTime(null);
+        setActiveRideId(null);
       }
     });
     s.on("paymentConfirmed", (d) => {
@@ -150,7 +164,7 @@ const Dashboard = () => {
 
         const rides = ridesRes.data || [];
         const completed = rides.filter(
-          (r) => r.paymentStatus === "completed" || r.status === "completed",
+          (r) => r.status === "completed" && r.paymentStatus === "completed",
         );
         const totalRides = completed.length;
         const totalSpent = completed.reduce((a, r) => a + (r.fare || 0), 0);
@@ -214,6 +228,7 @@ const Dashboard = () => {
         payload,
         authHeaders(),
       );
+      setActiveRideId(data._id);
       setBookingStatus("Ride requested! Waiting for a driver...");
       socket?.emit("rideRequest", {
         ...data,
@@ -221,6 +236,29 @@ const Dashboard = () => {
       });
     } catch {
       setBookingStatus("Failed to request ride.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const cancelRide = async () => {
+    if (!activeRideId) return;
+    setLoading(true);
+    try {
+      await axios.put(
+        `http://localhost:5003/api/rides/${activeRideId}/status`,
+        { status: "cancelled" },
+        authHeaders(),
+      );
+      setActiveRideId(null);
+      setBookingStatus("");
+      setRiderInfo(null);
+      setPickup(null);
+      setDestination(null);
+      setRouteInfo(null);
+      setFare(null);
+    } catch {
+      alert("Failed to cancel the ride request.");
     } finally {
       setLoading(false);
     }
@@ -651,6 +689,7 @@ const Dashboard = () => {
                 onLocationsUpdate={handleLocationsUpdate}
                 onRouteCalculated={handleRouteCalculated}
                 onRequestRide={requestRide}
+                onCancelRide={cancelRide}
               />
             )}
             {activeTab === "ride" && isRider && (
