@@ -302,9 +302,9 @@ const RideMap = ({ onLocationsUpdate, onRouteCalculated, initialPickup, initialD
 
       {/* Search Panel (passenger only) */}
       {!hideSearch && (
-        <div className="absolute top-3 left-3 right-3 z-[1000] space-y-2">
-          <div className="bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/20 dark:border-gray-700/50 p-3 space-y-2">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500 px-1">Plan your ride</p>
+        <div className="absolute top-4 left-4 right-4 sm:right-auto z-[1000] sm:w-[360px]">
+          <div className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-2xl rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.3)] border border-white/60 dark:border-white/10 p-4 space-y-3">
+            <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-400 px-1">Plan your ride</p>
 
             <SearchInput
               type="pickup"
