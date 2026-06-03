@@ -1,6 +1,7 @@
-import { useState, useContext } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useState, useContext, useEffect } from 'react';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import axios from 'axios';
+import { io } from 'socket.io-client';
 import { AuthContext } from '../context/AuthContext';
 
 const Login = () => {
@@ -12,6 +13,36 @@ const Login = () => {
   
   const { login } = useContext(AuthContext);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const [pendingRider, setPendingRider] = useState(location.state?.pendingRider || null);
+  const [socketNotification, setSocketNotification] = useState(
+    location.state?.pendingRider 
+      ? { status: "pending", message: "Your registration is under review by transiQo. We will update you in real-time." } 
+      : null
+  );
+
+  useEffect(() => {
+    if (!pendingRider) return;
+
+    const s = io("http://localhost:5003");
+    s.on("connect", () => {
+      s.emit("join", pendingRider.id);
+      console.log("Connected to socket as pending rider:", pendingRider.id);
+    });
+
+    s.on("registrationStatus", (d) => {
+      setSocketNotification(d);
+      if (d.status === "approved") {
+        alert("🎉 Congratulations! Your registration has been approved by transiQo. You can now log in.");
+        setPendingRider(null);
+      } else if (d.status === "pending") {
+        alert(`⚠️ Warning: ${d.message}`);
+      }
+    });
+
+    return () => s.disconnect();
+  }, [pendingRider]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -40,6 +71,13 @@ const Login = () => {
       }
     } catch (err) {
       setError(err.response?.data?.message || 'Login failed. Please try again.');
+      if (err.response?.status === 403 && err.response?.data?.riderId) {
+        setPendingRider({ id: err.response.data.riderId, name: email });
+        setSocketNotification({
+          status: "pending",
+          message: "Your registration is under review by transiQo. Listening for updates..."
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -54,6 +92,19 @@ const Login = () => {
           </h2>
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+          {socketNotification && (
+            <div className={`p-4 rounded-xl text-sm font-semibold border flex flex-col gap-1 text-center ${
+              socketNotification.status === 'approved' 
+                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
+                : 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20 animate-pulse'
+            }`}>
+              <p className="font-extrabold uppercase text-xs">
+                {socketNotification.status === 'approved' ? 'Approval Status: Approved' : 'Approval Status: Pending Review'}
+              </p>
+              <p>{socketNotification.message}</p>
+            </div>
+          )}
+
           {error && (
             <div className="bg-red-50 text-red-500 p-3 rounded-lg text-sm text-center">
               {error}

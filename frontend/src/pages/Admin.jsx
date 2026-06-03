@@ -16,7 +16,7 @@ const Admin = () => {
   const [revenueTimeframe, setRevenueTimeframe] = useState("weekly");
   const [printMonthModal, setPrintMonthModal] = useState(false);
   const [selectedPrintMonth, setSelectedPrintMonth] = useState("");
-  
+
   // Data states
   const [stats, setStats] = useState(null);
   const [users, setUsers] = useState([]);
@@ -100,7 +100,7 @@ const Admin = () => {
       } else if (activeTab === "passengers") {
         await fetchUsers();
       } else if (activeTab === "drivers") {
-        await fetchRiders();
+        await Promise.all([fetchRiders(), fetchRides(), fetchReviews()]);
       } else if (activeTab === "rides") {
         await fetchRides();
       } else if (activeTab === "reviews") {
@@ -135,13 +135,42 @@ const Admin = () => {
       if (type === "user") setUsers(users.filter((u) => u._id !== id));
       else if (type === "rider") setRiders(riders.filter((r) => r._id !== id));
       else if (type === "ride") setRides(rides.filter((r) => r._id !== id));
-      else if (type === "review") setReviews(reviews.filter((r) => r._id !== id));
+      else if (type === "review")
+        setReviews(reviews.filter((r) => r._id !== id));
 
       // Refresh stats if on dashboard or after mutations
       fetchStats();
       setDeleteConfirm(null);
     } catch (err) {
       alert(err.response?.data?.message || `Failed to delete ${type}`);
+    }
+  };
+
+  const handleApproveDriver = async (id) => {
+    try {
+      const { data } = await axios.put(
+        `${API_URL}/riders/${id}`,
+        { isApproved: true },
+        authHeaders()
+      );
+      setRiders(riders.map((r) => (r._id === id ? data : r)));
+      fetchStats();
+    } catch (err) {
+      alert(err.response?.data?.message || "Failed to approve driver.");
+    }
+  };
+
+  const handleDeclineDriver = async (id) => {
+    try {
+      const { data } = await axios.put(
+        `${API_URL}/riders/${id}`,
+        { isApproved: false },
+        authHeaders()
+      );
+      setRiders(riders.map((r) => (r._id === id ? data : r)));
+      fetchStats();
+    } catch (err) {
+      alert(err.response?.data?.message || "Failed to decline driver.");
     }
   };
 
@@ -176,8 +205,7 @@ const Admin = () => {
       r.pickupLocation?.address?.toLowerCase().includes(q) ||
       r.dropoffLocation?.address?.toLowerCase().includes(q);
 
-    const matchesStatus =
-      statusFilter === "all" || r.status === statusFilter;
+    const matchesStatus = statusFilter === "all" || r.status === statusFilter;
 
     return matchesSearch && matchesStatus;
   });
@@ -193,32 +221,38 @@ const Admin = () => {
 
   const executePrintMonth = (targetMonthStr) => {
     setPrintMonthModal(false);
-    
+
     // Filter rides to match exactly targetMonthStr
-    const monthRides = rides.filter(r => {
-      if (r.status !== 'completed' && r.status !== 'started') return false;
+    const monthRides = rides.filter((r) => {
+      if (r.status !== "completed" && r.status !== "started") return false;
       const d = new Date(r.createdAt);
-      const str = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const str = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
       return str === targetMonthStr;
     });
 
     let totalGross = 0;
     let totalSystem = 0;
-    let ledgerRows = '';
-    
+    let ledgerRows = "";
+
     if (monthRides.length === 0) {
-      ledgerRows = '<tr><td colspan="5" style="text-align: center; padding: 20px;">No completed rides found for this month.</td></tr>';
+      ledgerRows =
+        '<tr><td colspan="5" style="text-align: center; padding: 20px;">No completed rides found for this month.</td></tr>';
     } else {
-      monthRides.forEach(r => {
-        const date = new Date(r.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-        const pass = r.user?.name || 'Unknown';
-        const drv = r.rider?.name || 'Unknown';
+      monthRides.forEach((r) => {
+        const date = new Date(r.createdAt).toLocaleString("en-US", {
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+        const pass = r.user?.name || "Unknown";
+        const drv = r.rider?.name || "Unknown";
         const fare = r.fare || 0;
         const systemCut = fare * 0.25;
-        
+
         totalGross += fare;
         totalSystem += systemCut;
-        
+
         ledgerRows += `
           <tr>
             <td style="padding: 10px; border-bottom: 1px solid #f3f4f6;">${date}</td>
@@ -245,10 +279,13 @@ const Admin = () => {
 
     const doc = iframe.contentWindow.document;
     doc.open();
-    
+
     // Parse targetMonthStr ("YYYY-MM") safely without timezone shifting issues
-    const [year, month] = targetMonthStr.split('-');
-    const displayMonth = new Date(year, month - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    const [year, month] = targetMonthStr.split("-");
+    const displayMonth = new Date(year, month - 1, 1).toLocaleDateString(
+      "en-US",
+      { month: "long", year: "numeric" },
+    );
 
     doc.write(`
       <html>
@@ -288,11 +325,11 @@ const Admin = () => {
             </div>
             <div class="stat">
               <div class="stat-label">Gross Revenue</div>
-              <div class="stat-value">৳${totalGross.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits:2})}</div>
+              <div class="stat-value">৳${totalGross.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
             </div>
             <div class="stat">
               <div class="stat-label">System Revenue (25%)</div>
-              <div class="stat-value text-green">৳${totalSystem.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits:2})}</div>
+              <div class="stat-value text-green">৳${totalSystem.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
             </div>
           </div>
           
@@ -359,7 +396,9 @@ const Admin = () => {
             }}
           />
           <div className="min-w-0 flex-1">
-            <p className="text-white font-black text-sm truncate">{user.name}</p>
+            <p className="text-white font-black text-sm truncate">
+              {user.name}
+            </p>
             <span className="inline-block px-2 py-0.5 bg-red-500/20 text-red-400 border border-red-500/30 rounded-md text-[10px] uppercase font-bold tracking-wider mt-0.5">
               Super Admin
             </span>
@@ -372,8 +411,18 @@ const Admin = () => {
               id: "dashboard",
               label: "Overview",
               icon: (
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2v-4zM14 16a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 01-2-2v-4z" />
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 6a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2v-4zM14 16a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 01-2-2v-4z"
+                  />
                 </svg>
               ),
             },
@@ -381,8 +430,18 @@ const Admin = () => {
               id: "passengers",
               label: "Passengers",
               icon: (
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
+                  />
                 </svg>
               ),
             },
@@ -390,8 +449,18 @@ const Admin = () => {
               id: "drivers",
               label: "Drivers",
               icon: (
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7a4 4 0 118 0a4 4 0 01-8 0zM2 17c0-2.689 3-5 10-5s10 2.311 10 5v3H2v-3z" />
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8 7a4 4 0 118 0a4 4 0 01-8 0zM2 17c0-2.689 3-5 10-5s10 2.311 10 5v3H2v-3z"
+                  />
                 </svg>
               ),
             },
@@ -399,9 +468,24 @@ const Admin = () => {
               id: "rides",
               label: "Rides",
               icon: (
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                  />
                 </svg>
               ),
             },
@@ -409,8 +493,18 @@ const Admin = () => {
               id: "reviews",
               label: "Reviews",
               icon: (
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"
+                  />
                 </svg>
               ),
             },
@@ -436,7 +530,9 @@ const Admin = () => {
         <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
           <div>
             <h1 className="text-3xl font-black text-white capitalize">
-              {activeTab === "dashboard" ? "Admin Console" : `${activeTab} Management`}
+              {activeTab === "dashboard"
+                ? "Admin Console"
+                : `${activeTab} Management`}
             </h1>
             <p className="text-gray-400 text-sm mt-1">
               {activeTab === "dashboard"
@@ -461,7 +557,9 @@ const Admin = () => {
         {loading ? (
           <div className="flex items-center justify-center min-h-[40vh]">
             <div className="w-8 h-8 border-4 border-red-500/20 border-t-red-500 rounded-full animate-spin"></div>
-            <span className="ml-3 text-gray-400 font-semibold">Loading console data...</span>
+            <span className="ml-3 text-gray-400 font-semibold">
+              Loading console data...
+            </span>
           </div>
         ) : (
           <>
@@ -534,16 +632,24 @@ const Admin = () => {
                       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
                         <div>
                           <div className="flex items-center gap-3">
-                            <h3 className="text-lg font-black text-white">Revenue Trend</h3>
+                            <h3 className="text-lg font-black text-white">
+                              Revenue Trend
+                            </h3>
                             <div className="bg-black/50 p-1 rounded-lg flex border border-white/10">
                               <button
-                                onClick={() => { setRevenueTimeframe("weekly"); setHoveredRevenueIdx(null); }}
+                                onClick={() => {
+                                  setRevenueTimeframe("weekly");
+                                  setHoveredRevenueIdx(null);
+                                }}
                                 className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition ${revenueTimeframe === "weekly" ? "bg-white/20 text-white" : "text-gray-500 hover:text-white"}`}
                               >
                                 Last 7 Days
                               </button>
                               <button
-                                onClick={() => { setRevenueTimeframe("monthly"); setHoveredRevenueIdx(null); }}
+                                onClick={() => {
+                                  setRevenueTimeframe("monthly");
+                                  setHoveredRevenueIdx(null);
+                                }}
                                 className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition ${revenueTimeframe === "monthly" ? "bg-white/20 text-white" : "text-gray-500 hover:text-white"}`}
                               >
                                 Monthly
@@ -551,7 +657,9 @@ const Admin = () => {
                             </div>
                           </div>
                           <p className="text-xs text-gray-400 mt-1">
-                            {revenueTimeframe === "weekly" ? "Daily gross earnings over the last 7 days" : "Monthly earnings over the last 12 months"}
+                            {revenueTimeframe === "weekly"
+                              ? "Daily gross earnings over the last 7 days"
+                              : "Monthly earnings over the last 12 months"}
                           </p>
                         </div>
                         <div className="text-right flex items-center gap-3">
@@ -559,7 +667,9 @@ const Admin = () => {
                             <button
                               onClick={() => {
                                 const d = new Date();
-                                setSelectedPrintMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+                                setSelectedPrintMonth(
+                                  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+                                );
                                 setPrintMonthModal(true);
                               }}
                               className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-xl text-[10px] font-bold text-white transition-colors flex items-center gap-1.5"
@@ -569,45 +679,108 @@ const Admin = () => {
                           )}
                           <div>
                             <span className="px-3 py-1 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl text-[10px] font-bold block mb-1">
-                              ৳{(() => {
-                                const data = revenueTimeframe === "weekly" ? stats.revenueTrend : stats.monthlyRevenueTrend;
-                                return data ? data.reduce((sum, d) => sum + d.revenue, 0).toLocaleString() : 0;
-                              })()} Gross
+                              ৳
+                              {(() => {
+                                const data =
+                                  revenueTimeframe === "weekly"
+                                    ? stats.revenueTrend
+                                    : stats.monthlyRevenueTrend;
+                                return data
+                                  ? data
+                                      .reduce((sum, d) => sum + d.revenue, 0)
+                                      .toLocaleString()
+                                  : 0;
+                              })()}{" "}
+                              Gross
                             </span>
                             <span className="px-3 py-1 bg-green-500/10 border border-green-500/20 text-green-400 rounded-xl text-[10px] font-bold block">
-                              ৳{(() => {
-                                const data = revenueTimeframe === "weekly" ? stats.revenueTrend : stats.monthlyRevenueTrend;
-                                return data ? data.reduce((sum, d) => sum + d.systemRevenue, 0).toLocaleString() : 0;
-                              })()} System Cut
+                              ৳
+                              {(() => {
+                                const data =
+                                  revenueTimeframe === "weekly"
+                                    ? stats.revenueTrend
+                                    : stats.monthlyRevenueTrend;
+                                return data
+                                  ? data
+                                      .reduce(
+                                        (sum, d) => sum + d.systemRevenue,
+                                        0,
+                                      )
+                                      .toLocaleString()
+                                  : 0;
+                              })()}{" "}
+                              System Cut
                             </span>
                           </div>
                         </div>
                       </div>
-                      
+
                       {(() => {
-                        const chartData = revenueTimeframe === "weekly" ? stats.revenueTrend : stats.monthlyRevenueTrend;
+                        const chartData =
+                          revenueTimeframe === "weekly"
+                            ? stats.revenueTrend
+                            : stats.monthlyRevenueTrend;
                         if (chartData && chartData.length > 0) {
-                          const maxRevVal = Math.max(...chartData.map(d => d.revenue), 100);
-                          const stepX = revenueTimeframe === "weekly" ? 68 : 450 / 11;
-                          
+                          const maxRevVal = Math.max(
+                            ...chartData.map((d) => d.revenue),
+                            100,
+                          );
+                          const stepX =
+                            revenueTimeframe === "weekly" ? 68 : 450 / 11;
+
                           return (
                             <div className="relative">
-                              <svg className="w-full h-56 overflow-visible" viewBox="0 0 500 200">
+                              <svg
+                                className="w-full h-56 overflow-visible"
+                                viewBox="0 0 500 200"
+                              >
                                 <defs>
-                                  <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stopColor="#ef4444" stopOpacity="0.4" />
-                                    <stop offset="100%" stopColor="#ef4444" stopOpacity="0.0" />
+                                  <linearGradient
+                                    id="revenueGrad"
+                                    x1="0"
+                                    y1="0"
+                                    x2="0"
+                                    y2="1"
+                                  >
+                                    <stop
+                                      offset="0%"
+                                      stopColor="#ef4444"
+                                      stopOpacity="0.4"
+                                    />
+                                    <stop
+                                      offset="100%"
+                                      stopColor="#ef4444"
+                                      stopOpacity="0.0"
+                                    />
                                   </linearGradient>
                                 </defs>
 
                                 {/* Grid Lines */}
                                 {[0, 0.25, 0.5, 0.75, 1].map((ratio, idx) => {
                                   const y = 30 + ratio * 130;
-                                  const labelVal = (maxRevVal * (1 - ratio)).toFixed(0);
+                                  const labelVal = (
+                                    maxRevVal *
+                                    (1 - ratio)
+                                  ).toFixed(0);
                                   return (
                                     <g key={idx}>
-                                      <line x1="45" y1={y} x2="480" y2={y} stroke="rgba(255,255,255,0.03)" strokeWidth="1" strokeDasharray="3,3" />
-                                      <text x="35" y={y + 4} fill="rgba(255,255,255,0.4)" fontSize="9" textAnchor="end" className="font-mono">
+                                      <line
+                                        x1="45"
+                                        y1={y}
+                                        x2="480"
+                                        y2={y}
+                                        stroke="rgba(255,255,255,0.03)"
+                                        strokeWidth="1"
+                                        strokeDasharray="3,3"
+                                      />
+                                      <text
+                                        x="35"
+                                        y={y + 4}
+                                        fill="rgba(255,255,255,0.4)"
+                                        fontSize="9"
+                                        textAnchor="end"
+                                        className="font-mono"
+                                      >
                                         ৳{Number(labelVal).toLocaleString()}
                                       </text>
                                     </g>
@@ -619,8 +792,18 @@ const Admin = () => {
                                   const x = 55 + i * stepX;
                                   // For monthly, only show every other label if it gets too crowded, or just rotate. We'll just show them all since it's 12.
                                   return (
-                                    <text key={i} x={x} y="185" fill="rgba(255,255,255,0.5)" fontSize="8" textAnchor="middle" className="font-bold">
-                                      {revenueTimeframe === "weekly" ? d.day : d.month}
+                                    <text
+                                      key={i}
+                                      x={x}
+                                      y="185"
+                                      fill="rgba(255,255,255,0.5)"
+                                      fontSize="8"
+                                      textAnchor="middle"
+                                      className="font-bold"
+                                    >
+                                      {revenueTimeframe === "weekly"
+                                        ? d.day
+                                        : d.month}
                                     </text>
                                   );
                                 })}
@@ -631,14 +814,24 @@ const Admin = () => {
                                     x: 55 + i * stepX,
                                     y: 160 - (d.revenue / maxRevVal) * 130,
                                   }));
-                                  const lineD = `M ${points.map(p => `${p.x} ${p.y}`).join(' L ')}`;
-                                  const areaD = `M 55 160 L ${points.map(p => `${p.x} ${p.y}`).join(' L ')} L ${points[points.length-1].x} 160 Z`;
-                                  
+                                  const lineD = `M ${points.map((p) => `${p.x} ${p.y}`).join(" L ")}`;
+                                  const areaD = `M 55 160 L ${points.map((p) => `${p.x} ${p.y}`).join(" L ")} L ${points[points.length - 1].x} 160 Z`;
+
                                   return (
                                     <>
-                                      <path d={areaD} fill="url(#revenueGrad)" />
-                                      <path d={lineD} fill="none" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                                      
+                                      <path
+                                        d={areaD}
+                                        fill="url(#revenueGrad)"
+                                      />
+                                      <path
+                                        d={lineD}
+                                        fill="none"
+                                        stroke="#ef4444"
+                                        strokeWidth="2.5"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                      />
+
                                       {/* Circles / Hover Hotspots */}
                                       {points.map((p, i) => (
                                         <g key={i}>
@@ -648,8 +841,12 @@ const Admin = () => {
                                             r={hoveredRevenueIdx === i ? 6 : 4}
                                             className="fill-red-500 stroke-gray-900 transition-all duration-150 cursor-pointer"
                                             strokeWidth={2}
-                                            onMouseEnter={() => setHoveredRevenueIdx(i)}
-                                            onMouseLeave={() => setHoveredRevenueIdx(null)}
+                                            onMouseEnter={() =>
+                                              setHoveredRevenueIdx(i)
+                                            }
+                                            onMouseLeave={() =>
+                                              setHoveredRevenueIdx(null)
+                                            }
                                           />
                                         </g>
                                       ))}
@@ -659,26 +856,54 @@ const Admin = () => {
                               </svg>
 
                               {/* Hover Tooltip overlay */}
-                              {hoveredRevenueIdx !== null && chartData[hoveredRevenueIdx] && (
-                                <div 
-                                  className="absolute bg-gray-950/95 backdrop-blur border border-white/10 px-3 py-2 rounded-2xl shadow-xl pointer-events-none z-50 text-xs transition-all duration-100 animate-fade-in"
-                                  style={{
-                                    left: `${11 + hoveredRevenueIdx * (revenueTimeframe === "weekly" ? 13.6 : (450/11)/5)}%`,
-                                    top: `${Math.min(100, 160 - (chartData[hoveredRevenueIdx].revenue / maxRevVal) * 60)}px`,
-                                    transform: 'translate(-50%, -120%)'
-                                  }}
-                                >
-                                  <p className="text-gray-400 font-bold">{revenueTimeframe === "weekly" ? chartData[hoveredRevenueIdx].date : chartData[hoveredRevenueIdx].month}</p>
-                                  <p className="text-red-400 font-black text-sm mt-0.5">৳{chartData[hoveredRevenueIdx].revenue?.toLocaleString()} <span className="text-[10px] text-gray-500 font-medium">Gross</span></p>
-                                  <p className="text-green-400 font-black text-xs mt-0.5">৳{chartData[hoveredRevenueIdx].systemRevenue?.toLocaleString()} <span className="text-[10px] text-gray-500 font-medium">Cut</span></p>
-                                  <p className="text-gray-500 font-medium text-[10px] mt-1">{chartData[hoveredRevenueIdx].rides} ride{chartData[hoveredRevenueIdx].rides !== 1 ? 's' : ''}</p>
-                                </div>
-                              )}
+                              {hoveredRevenueIdx !== null &&
+                                chartData[hoveredRevenueIdx] && (
+                                  <div
+                                    className="absolute bg-gray-950/95 backdrop-blur border border-white/10 px-3 py-2 rounded-2xl shadow-xl pointer-events-none z-50 text-xs transition-all duration-100 animate-fade-in"
+                                    style={{
+                                      left: `${11 + hoveredRevenueIdx * (revenueTimeframe === "weekly" ? 13.6 : 450 / 11 / 5)}%`,
+                                      top: `${Math.min(100, 160 - (chartData[hoveredRevenueIdx].revenue / maxRevVal) * 60)}px`,
+                                      transform: "translate(-50%, -120%)",
+                                    }}
+                                  >
+                                    <p className="text-gray-400 font-bold">
+                                      {revenueTimeframe === "weekly"
+                                        ? chartData[hoveredRevenueIdx].date
+                                        : chartData[hoveredRevenueIdx].month}
+                                    </p>
+                                    <p className="text-red-400 font-black text-sm mt-0.5">
+                                      ৳
+                                      {chartData[
+                                        hoveredRevenueIdx
+                                      ].revenue?.toLocaleString()}{" "}
+                                      <span className="text-[10px] text-gray-500 font-medium">
+                                        Gross
+                                      </span>
+                                    </p>
+                                    <p className="text-green-400 font-black text-xs mt-0.5">
+                                      ৳
+                                      {chartData[
+                                        hoveredRevenueIdx
+                                      ].systemRevenue?.toLocaleString()}{" "}
+                                      <span className="text-[10px] text-gray-500 font-medium">
+                                        Cut
+                                      </span>
+                                    </p>
+                                    <p className="text-gray-500 font-medium text-[10px] mt-1">
+                                      {chartData[hoveredRevenueIdx].rides} ride
+                                      {chartData[hoveredRevenueIdx].rides !== 1
+                                        ? "s"
+                                        : ""}
+                                    </p>
+                                  </div>
+                                )}
                             </div>
                           );
                         } else {
                           return (
-                            <div className="h-48 flex items-center justify-center text-gray-500">No trend data available</div>
+                            <div className="h-48 flex items-center justify-center text-gray-500">
+                              No trend data available
+                            </div>
                           );
                         }
                       })()}
@@ -688,26 +913,60 @@ const Admin = () => {
                     <div className="bg-gray-900 border border-white/5 rounded-3xl p-6 relative">
                       <div className="flex justify-between items-center mb-6">
                         <div>
-                          <h3 className="text-lg font-black text-white">Ride Volume</h3>
-                          <p className="text-xs text-gray-400 mt-0.5">Total ride requests over the last 7 days</p>
+                          <h3 className="text-lg font-black text-white">
+                            Ride Volume
+                          </h3>
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            Total ride requests over the last 7 days
+                          </p>
                         </div>
                         <span className="px-3 py-1 bg-blue-500/10 border border-blue-500/20 text-blue-400 rounded-xl text-xs font-bold">
-                          {stats.revenueTrend ? stats.revenueTrend.reduce((sum, d) => sum + d.rides, 0) : 0} Total Rides
+                          {stats.revenueTrend
+                            ? stats.revenueTrend.reduce(
+                                (sum, d) => sum + d.rides,
+                                0,
+                              )
+                            : 0}{" "}
+                          Total Rides
                         </span>
                       </div>
 
                       {stats.revenueTrend && stats.revenueTrend.length > 0 ? (
                         <div className="relative">
-                          <svg className="w-full h-56 overflow-visible" viewBox="0 0 500 200">
+                          <svg
+                            className="w-full h-56 overflow-visible"
+                            viewBox="0 0 500 200"
+                          >
                             {/* Grid Lines */}
                             {[0, 0.25, 0.5, 0.75, 1].map((ratio, idx) => {
                               const y = 30 + ratio * 130;
-                              const maxRideVal = Math.max(...stats.revenueTrend.map(d => d.rides), 5);
-                              const labelVal = (maxRideVal * (1 - ratio)).toFixed(0);
+                              const maxRideVal = Math.max(
+                                ...stats.revenueTrend.map((d) => d.rides),
+                                5,
+                              );
+                              const labelVal = (
+                                maxRideVal *
+                                (1 - ratio)
+                              ).toFixed(0);
                               return (
                                 <g key={idx}>
-                                  <line x1="45" y1={y} x2="480" y2={y} stroke="rgba(255,255,255,0.03)" strokeWidth="1" strokeDasharray="3,3" />
-                                  <text x="35" y={y + 4} fill="rgba(255,255,255,0.4)" fontSize="9" textAnchor="end" className="font-mono">
+                                  <line
+                                    x1="45"
+                                    y1={y}
+                                    x2="480"
+                                    y2={y}
+                                    stroke="rgba(255,255,255,0.03)"
+                                    strokeWidth="1"
+                                    strokeDasharray="3,3"
+                                  />
+                                  <text
+                                    x="35"
+                                    y={y + 4}
+                                    fill="rgba(255,255,255,0.4)"
+                                    fontSize="9"
+                                    textAnchor="end"
+                                    className="font-mono"
+                                  >
                                     {labelVal}
                                   </text>
                                 </g>
@@ -718,7 +977,15 @@ const Admin = () => {
                             {stats.revenueTrend.map((d, i) => {
                               const x = 55 + i * 68;
                               return (
-                                <text key={i} x={x} y="185" fill="rgba(255,255,255,0.5)" fontSize="9" textAnchor="middle" className="font-bold">
+                                <text
+                                  key={i}
+                                  x={x}
+                                  y="185"
+                                  fill="rgba(255,255,255,0.5)"
+                                  fontSize="9"
+                                  textAnchor="middle"
+                                  className="font-bold"
+                                >
                                   {d.day}
                                 </text>
                               );
@@ -726,7 +993,10 @@ const Admin = () => {
 
                             {/* Draw Bars */}
                             {(() => {
-                              const maxRideVal = Math.max(...stats.revenueTrend.map(d => d.rides), 5);
+                              const maxRideVal = Math.max(
+                                ...stats.revenueTrend.map((d) => d.rides),
+                                5,
+                              );
                               return stats.revenueTrend.map((d, i) => {
                                 const x = 41 + i * 68;
                                 const height = (d.rides / maxRideVal) * 130;
@@ -739,9 +1009,11 @@ const Admin = () => {
                                     width={28}
                                     height={Math.max(height, 2)}
                                     rx={4}
-                                    className={`fill-blue-500 hover:fill-blue-400 transition-all duration-155 cursor-pointer ${hoveredRidesIdx === i ? 'opacity-90' : 'opacity-70'}`}
+                                    className={`fill-blue-500 hover:fill-blue-400 transition-all duration-155 cursor-pointer ${hoveredRidesIdx === i ? "opacity-90" : "opacity-70"}`}
                                     onMouseEnter={() => setHoveredRidesIdx(i)}
-                                    onMouseLeave={() => setHoveredRidesIdx(null)}
+                                    onMouseLeave={() =>
+                                      setHoveredRidesIdx(null)
+                                    }
                                   />
                                 );
                               });
@@ -749,30 +1021,49 @@ const Admin = () => {
                           </svg>
 
                           {/* Hover Tooltip overlay */}
-                          {hoveredRidesIdx !== null && stats.revenueTrend[hoveredRidesIdx] && (
-                            <div 
-                              className="absolute bg-gray-950/95 backdrop-blur border border-white/10 px-3 py-2 rounded-2xl shadow-xl pointer-events-none z-50 text-xs transition-all duration-100 animate-fade-in"
-                              style={{
-                                left: `${11 + hoveredRidesIdx * 13.6}%`,
-                                top: `${Math.min(100, 160 - (stats.revenueTrend[hoveredRidesIdx].rides / Math.max(...stats.revenueTrend.map(d => d.rides), 5)) * 60)}px`,
-                                transform: 'translate(-50%, -120%)'
-                              }}
-                            >
-                              <p className="text-gray-400 font-bold">{stats.revenueTrend[hoveredRidesIdx].date}</p>
-                              <p className="text-blue-400 font-black text-sm mt-0.5">{stats.revenueTrend[hoveredRidesIdx].rides} Ride{stats.revenueTrend[hoveredRidesIdx].rides !== 1 ? 's' : ''}</p>
-                              <p className="text-gray-500 font-medium text-[10px]">Revenue: ৳{stats.revenueTrend[hoveredRidesIdx].revenue?.toLocaleString()}</p>
-                            </div>
-                          )}
+                          {hoveredRidesIdx !== null &&
+                            stats.revenueTrend[hoveredRidesIdx] && (
+                              <div
+                                className="absolute bg-gray-950/95 backdrop-blur border border-white/10 px-3 py-2 rounded-2xl shadow-xl pointer-events-none z-50 text-xs transition-all duration-100 animate-fade-in"
+                                style={{
+                                  left: `${11 + hoveredRidesIdx * 13.6}%`,
+                                  top: `${Math.min(100, 160 - (stats.revenueTrend[hoveredRidesIdx].rides / Math.max(...stats.revenueTrend.map((d) => d.rides), 5)) * 60)}px`,
+                                  transform: "translate(-50%, -120%)",
+                                }}
+                              >
+                                <p className="text-gray-400 font-bold">
+                                  {stats.revenueTrend[hoveredRidesIdx].date}
+                                </p>
+                                <p className="text-blue-400 font-black text-sm mt-0.5">
+                                  {stats.revenueTrend[hoveredRidesIdx].rides}{" "}
+                                  Ride
+                                  {stats.revenueTrend[hoveredRidesIdx].rides !==
+                                  1
+                                    ? "s"
+                                    : ""}
+                                </p>
+                                <p className="text-gray-500 font-medium text-[10px]">
+                                  Revenue: ৳
+                                  {stats.revenueTrend[
+                                    hoveredRidesIdx
+                                  ].revenue?.toLocaleString()}
+                                </p>
+                              </div>
+                            )}
                         </div>
                       ) : (
-                        <div className="h-48 flex items-center justify-center text-gray-500">No volume data available</div>
+                        <div className="h-48 flex items-center justify-center text-gray-500">
+                          No volume data available
+                        </div>
                       )}
                     </div>
 
                     {/* Recent Rides Table */}
                     <div className="bg-gray-900 border border-white/5 rounded-3xl p-6">
                       <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-lg font-black text-white">Recent Rides</h3>
+                        <h3 className="text-lg font-black text-white">
+                          Recent Rides
+                        </h3>
                         <button
                           onClick={() => setActiveTab("rides")}
                           className="text-xs font-bold text-red-400 hover:text-red-300"
@@ -793,27 +1084,35 @@ const Admin = () => {
                           </thead>
                           <tbody className="divide-y divide-white/5">
                             {rides.slice(0, 5).map((ride) => (
-                              <tr key={ride._id} className="hover:bg-white/5 transition-colors">
+                              <tr
+                                key={ride._id}
+                                className="hover:bg-white/5 transition-colors"
+                              >
                                 <td className="py-3 font-semibold text-white">
                                   {ride.user?.name || "Unknown"}
                                 </td>
                                 <td className="py-3 text-gray-300">
                                   {ride.rider?.name || "Unassigned"}
                                 </td>
-                                <td className="py-3 font-bold text-green-400">৳{ride.fare}</td>
+                                <td className="py-3 font-bold text-green-400">
+                                  ৳{ride.fare}
+                                </td>
                                 <td className="py-3">
                                   <span
                                     className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase border ${
-                                      ride.status === "completed" && ride.paymentStatus === "completed"
+                                      ride.status === "completed" &&
+                                      ride.paymentStatus === "completed"
                                         ? "bg-green-500/10 text-green-400 border-green-500/20"
-                                        : ride.status === "completed" && ride.paymentStatus !== "completed"
+                                        : ride.status === "completed" &&
+                                            ride.paymentStatus !== "completed"
                                           ? "bg-blue-500/10 text-blue-400 border-blue-500/20 animate-pulse"
                                           : ride.status === "cancelled"
                                             ? "bg-red-500/10 text-red-400 border-red-500/20"
                                             : "bg-blue-500/10 text-blue-400 border-blue-500/20"
                                     }`}
                                   >
-                                    {ride.status === "completed" && ride.paymentStatus !== "completed"
+                                    {ride.status === "completed" &&
+                                    ride.paymentStatus !== "completed"
                                       ? "in progress"
                                       : ride.status}
                                   </span>
@@ -821,7 +1120,10 @@ const Admin = () => {
                                 <td className="py-3 text-right">
                                   <button
                                     onClick={() =>
-                                      setReceiptConfig({ rideId: ride._id, autoAction: null })
+                                      setReceiptConfig({
+                                        rideId: ride._id,
+                                        autoAction: null,
+                                      })
                                     }
                                     className="px-3 py-1 bg-white/5 hover:bg-white/10 rounded-lg text-xs font-bold transition border border-white/10"
                                   >
@@ -832,7 +1134,10 @@ const Admin = () => {
                             ))}
                             {rides.length === 0 && (
                               <tr>
-                                <td colSpan="5" className="text-center py-6 text-gray-500 font-medium">
+                                <td
+                                  colSpan="5"
+                                  className="text-center py-6 text-gray-500 font-medium"
+                                >
                                   No recent rides found.
                                 </td>
                               </tr>
@@ -847,26 +1152,45 @@ const Admin = () => {
                   <div className="space-y-6">
                     {/* Ride Status Distribution */}
                     <div className="bg-gray-900 border border-white/5 rounded-3xl p-6">
-                      <h3 className="text-lg font-black text-white mb-4">Ride Distribution</h3>
+                      <h3 className="text-lg font-black text-white mb-4">
+                        Ride Distribution
+                      </h3>
                       <div className="space-y-4">
                         {(() => {
-                          const filteredBreakdown = Object.entries(stats.statusBreakdown || {})
-                            .filter(([status]) => !["accepted", "arrived", "started"].includes(status));
-                          const counts = filteredBreakdown.map(([_, count]) => count);
+                          const filteredBreakdown = Object.entries(
+                            stats.statusBreakdown || {},
+                          ).filter(
+                            ([status]) =>
+                              !["accepted", "arrived", "started"].includes(
+                                status,
+                              ),
+                          );
+                          const counts = filteredBreakdown.map(
+                            ([_, count]) => count,
+                          );
                           const maxCount = Math.max(...counts, 1);
 
                           return filteredBreakdown.map(([status, count]) => {
-                            const percentage = ((count / maxCount) * 100).toFixed(0);
-                            
+                            const percentage = (
+                              (count / maxCount) *
+                              100
+                            ).toFixed(0);
+
                             let barColor = "bg-blue-500";
-                            if (status === "completed") barColor = "bg-emerald-500";
-                            else if (status === "cancelled") barColor = "bg-red-500";
+                            if (status === "completed")
+                              barColor = "bg-emerald-500";
+                            else if (status === "cancelled")
+                              barColor = "bg-red-500";
 
                             return (
                               <div key={status}>
                                 <div className="flex justify-between text-xs font-semibold mb-1">
-                                  <span className="capitalize text-gray-400">{status}</span>
-                                  <span className="text-white font-bold">{count}</span>
+                                  <span className="capitalize text-gray-400">
+                                    {status}
+                                  </span>
+                                  <span className="text-white font-bold">
+                                    {count}
+                                  </span>
                                 </div>
                                 <div className="w-full bg-white/5 rounded-full h-2">
                                   <div
@@ -883,17 +1207,26 @@ const Admin = () => {
 
                     {/* Payment Method Breakdown Card */}
                     <div className="bg-gray-900 border border-white/5 rounded-3xl p-6">
-                      <h3 className="text-lg font-black text-white mb-4">Payment Breakdown</h3>
+                      <h3 className="text-lg font-black text-white mb-4">
+                        Payment Breakdown
+                      </h3>
                       {stats.paymentBreakdown ? (
                         <div className="space-y-6">
                           {/* Progress bar split */}
                           {(() => {
-                            const cashCount = stats.paymentBreakdown.cash?.count || 0;
-                            const cardCount = stats.paymentBreakdown.card?.count || 0;
+                            const cashCount =
+                              stats.paymentBreakdown.cash?.count || 0;
+                            const cardCount =
+                              stats.paymentBreakdown.card?.count || 0;
                             const totalCount = cashCount + cardCount || 1;
-                            const cashPct = ((cashCount / totalCount) * 100).toFixed(0);
-                            const cardPct = (100 - parseFloat(cashPct)).toFixed(0);
-                            
+                            const cashPct = (
+                              (cashCount / totalCount) *
+                              100
+                            ).toFixed(0);
+                            const cardPct = (100 - parseFloat(cashPct)).toFixed(
+                              0,
+                            );
+
                             return (
                               <div>
                                 <div className="flex justify-between text-xs text-gray-400 font-bold mb-2">
@@ -901,8 +1234,14 @@ const Admin = () => {
                                   <span>Card ({cardPct}%)</span>
                                 </div>
                                 <div className="w-full bg-white/5 rounded-full h-3 flex overflow-hidden">
-                                  <div className="bg-emerald-500 h-full transition-all" style={{ width: `${cashPct}%` }}></div>
-                                  <div className="bg-blue-500 h-full transition-all" style={{ width: `${cardPct}%` }}></div>
+                                  <div
+                                    className="bg-emerald-500 h-full transition-all"
+                                    style={{ width: `${cashPct}%` }}
+                                  ></div>
+                                  <div
+                                    className="bg-blue-500 h-full transition-all"
+                                    style={{ width: `${cardPct}%` }}
+                                  ></div>
                                 </div>
                               </div>
                             );
@@ -913,12 +1252,21 @@ const Admin = () => {
                             <div className="flex items-center gap-3">
                               <span className="text-2xl">💵</span>
                               <div>
-                                <p className="text-white font-bold text-sm">Cash Payments</p>
-                                <p className="text-[10px] text-gray-400 mt-0.5">{stats.paymentBreakdown.cash?.count || 0} completed rides</p>
+                                <p className="text-white font-bold text-sm">
+                                  Cash Payments
+                                </p>
+                                <p className="text-[10px] text-gray-400 mt-0.5">
+                                  {stats.paymentBreakdown.cash?.count || 0}{" "}
+                                  completed rides
+                                </p>
                               </div>
                             </div>
                             <div className="text-right">
-                              <p className="text-emerald-400 font-extrabold text-sm">৳{stats.paymentBreakdown.cash?.amount?.toLocaleString() || 0}</p>
+                              <p className="text-emerald-400 font-extrabold text-sm">
+                                ৳
+                                {stats.paymentBreakdown.cash?.amount?.toLocaleString() ||
+                                  0}
+                              </p>
                             </div>
                           </div>
 
@@ -927,27 +1275,43 @@ const Admin = () => {
                             <div className="flex items-center gap-3">
                               <span className="text-2xl">💳</span>
                               <div>
-                                <p className="text-white font-bold text-sm">Card Payments</p>
-                                <p className="text-[10px] text-gray-400 mt-0.5">{stats.paymentBreakdown.card?.count || 0} completed rides</p>
+                                <p className="text-white font-bold text-sm">
+                                  Card Payments
+                                </p>
+                                <p className="text-[10px] text-gray-400 mt-0.5">
+                                  {stats.paymentBreakdown.card?.count || 0}{" "}
+                                  completed rides
+                                </p>
                               </div>
                             </div>
                             <div className="text-right">
-                              <p className="text-blue-400 font-extrabold text-sm">৳{stats.paymentBreakdown.card?.amount?.toLocaleString() || 0}</p>
+                              <p className="text-blue-400 font-extrabold text-sm">
+                                ৳
+                                {stats.paymentBreakdown.card?.amount?.toLocaleString() ||
+                                  0}
+                              </p>
                             </div>
                           </div>
                         </div>
                       ) : (
-                        <p className="text-gray-500 text-sm">No payment data available</p>
+                        <p className="text-gray-500 text-sm">
+                          No payment data available
+                        </p>
                       )}
                     </div>
 
                     {/* Top Performing Drivers Card */}
                     <div className="bg-gray-900 border border-white/5 rounded-3xl p-6">
-                      <h3 className="text-lg font-black text-white mb-4">🏆 Top Drivers</h3>
+                      <h3 className="text-lg font-black text-white mb-4">
+                        🏆 Top Drivers
+                      </h3>
                       {stats.topRiders && stats.topRiders.length > 0 ? (
                         <div className="space-y-4">
                           {stats.topRiders.map((driver, index) => (
-                            <div key={driver._id || index} className="flex items-center gap-3 p-3 bg-white/5 rounded-2xl border border-white/5 relative overflow-hidden group hover:border-red-500/20 transition-all">
+                            <div
+                              key={driver._id || index}
+                              className="flex items-center gap-3 p-3 bg-white/5 rounded-2xl border border-white/5 relative overflow-hidden group hover:border-red-500/20 transition-all"
+                            >
                               <img
                                 src={driver.profilePicture || DEFAULT_AVATAR}
                                 alt={driver.name}
@@ -958,18 +1322,27 @@ const Admin = () => {
                               />
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-1.5">
-                                  <p className="text-white font-bold text-xs truncate">{driver.name}</p>
+                                  <p className="text-white font-bold text-xs truncate">
+                                    {driver.name}
+                                  </p>
                                   <span className="text-[10px] font-bold text-yellow-400 flex items-center">
                                     ⭐ {driver.rating?.toFixed(1)}
                                   </span>
                                 </div>
                                 <p className="text-[10px] text-gray-400 truncate">
-                                  {driver.vehicle ? `${driver.vehicle.make} ${driver.vehicle.model}` : 'No vehicle info'}
+                                  {driver.vehicle
+                                    ? `${driver.vehicle.make} ${driver.vehicle.model}`
+                                    : "No vehicle info"}
                                 </p>
-                                <p className="text-[9px] text-gray-500 mt-0.5">{driver.ridesCount} trip{driver.ridesCount !== 1 ? 's' : ''}</p>
+                                <p className="text-[9px] text-gray-500 mt-0.5">
+                                  {driver.ridesCount} trip
+                                  {driver.ridesCount !== 1 ? "s" : ""}
+                                </p>
                               </div>
                               <div className="text-right flex-shrink-0">
-                                <p className="text-green-400 font-extrabold text-xs">৳{driver.earnings?.toLocaleString()}</p>
+                                <p className="text-green-400 font-extrabold text-xs">
+                                  ৳{driver.earnings?.toLocaleString()}
+                                </p>
                                 <span className="inline-block px-1.5 py-0.5 bg-red-500/10 text-red-400 rounded text-[8px] font-bold mt-1">
                                   #{index + 1}
                                 </span>
@@ -978,17 +1351,24 @@ const Admin = () => {
                           ))}
                         </div>
                       ) : (
-                        <p className="text-gray-500 text-sm">No drivers data available yet</p>
+                        <p className="text-gray-500 text-sm">
+                          No drivers data available yet
+                        </p>
                       )}
                     </div>
 
                     {/* Needs Monitoring Card (Worst Riders) */}
                     <div className="bg-gray-900 border border-red-500/30 rounded-3xl p-6">
-                      <h3 className="text-lg font-black text-white mb-4 flex items-center gap-2">⚠️ Needs Monitoring</h3>
+                      <h3 className="text-lg font-black text-white mb-4 flex items-center gap-2">
+                        ⚠️ Needs Monitoring
+                      </h3>
                       {stats.worstRiders && stats.worstRiders.length > 0 ? (
                         <div className="space-y-4">
                           {stats.worstRiders.map((driver) => (
-                            <div key={driver._id} className="flex items-center gap-3 p-3 bg-red-500/5 rounded-2xl border border-red-500/10 relative overflow-hidden group">
+                            <div
+                              key={driver._id}
+                              className="flex items-center gap-3 p-3 bg-red-500/5 rounded-2xl border border-red-500/10 relative overflow-hidden group"
+                            >
                               <img
                                 src={driver.profilePicture || DEFAULT_AVATAR}
                                 alt={driver.name}
@@ -999,7 +1379,9 @@ const Admin = () => {
                               />
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-1.5">
-                                  <p className="text-white font-bold text-xs truncate">{driver.name}</p>
+                                  <p className="text-white font-bold text-xs truncate">
+                                    {driver.name}
+                                  </p>
                                   <span className="text-[10px] font-bold text-red-400 flex items-center">
                                     ⭐ {driver.rating?.toFixed(1)}
                                   </span>
@@ -1023,7 +1405,9 @@ const Admin = () => {
                           ))}
                         </div>
                       ) : (
-                        <p className="text-gray-500 text-sm">No drivers currently need monitoring.</p>
+                        <p className="text-gray-500 text-sm">
+                          No drivers currently need monitoring.
+                        </p>
                       )}
                     </div>
                   </div>
@@ -1084,9 +1468,17 @@ const Admin = () => {
                       </thead>
                       <tbody className="divide-y divide-white/5">
                         {filteredUsers.map((passenger) => (
-                          <tr key={passenger._id} className="hover:bg-white/5 transition-colors">
+                          <tr
+                            key={passenger._id}
+                            className="hover:bg-white/5 transition-colors"
+                          >
                             <td
-                              onClick={() => setSelectedProfile({ type: "user", data: passenger })}
+                              onClick={() =>
+                                setSelectedProfile({
+                                  type: "user",
+                                  data: passenger,
+                                })
+                              }
                               className="py-4 px-4 flex items-center gap-3 font-semibold text-white cursor-pointer group"
                             >
                               <img
@@ -1108,8 +1500,12 @@ const Admin = () => {
                                 </p>
                               </div>
                             </td>
-                            <td className="py-4 px-4 text-gray-300">{passenger.email}</td>
-                            <td className="py-4 px-4 text-gray-300">{passenger.phone || "N/A"}</td>
+                            <td className="py-4 px-4 text-gray-300">
+                              {passenger.email}
+                            </td>
+                            <td className="py-4 px-4 text-gray-300">
+                              {passenger.phone || "N/A"}
+                            </td>
                             <td className="py-4 px-4">
                               <span
                                 className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase border ${
@@ -1122,34 +1518,31 @@ const Admin = () => {
                               </span>
                             </td>
                             <td className="py-4 px-4 text-gray-400">
-                              {new Date(passenger.createdAt).toLocaleDateString()}
+                              {new Date(
+                                passenger.createdAt,
+                              ).toLocaleDateString()}
                             </td>
-                            <td className="py-4 px-4 text-right space-x-2">
+                            <td className="py-4 px-4 text-right">
                               <button
-                                onClick={() => setSelectedProfile({ type: "user", data: passenger })}
+                                onClick={() =>
+                                  setSelectedProfile({
+                                    type: "user",
+                                    data: passenger,
+                                  })
+                                }
                                 className="px-3 py-1 bg-blue-600/10 hover:bg-blue-600 text-blue-400 hover:text-white rounded-lg text-xs font-bold transition border border-blue-500/20"
                               >
                                 Edit Profile
-                              </button>
-                              <button
-                                onClick={() =>
-                                  setDeleteConfirm({
-                                    type: "user",
-                                    id: passenger._id,
-                                    name: passenger.name,
-                                  })
-                                }
-                                disabled={passenger._id === user._id}
-                                className="px-3 py-1 bg-red-600/10 hover:bg-red-600 text-red-400 hover:text-white rounded-lg text-xs font-bold transition border border-red-500/20 disabled:opacity-30 disabled:pointer-events-none"
-                              >
-                                Delete
                               </button>
                             </td>
                           </tr>
                         ))}
                         {filteredUsers.length === 0 && (
                           <tr>
-                            <td colSpan="6" className="text-center py-8 text-gray-500 font-semibold">
+                            <td
+                              colSpan="6"
+                              className="text-center py-8 text-gray-500 font-semibold"
+                            >
                               No passengers found matching search.
                             </td>
                           </tr>
@@ -1175,9 +1568,17 @@ const Admin = () => {
                       </thead>
                       <tbody className="divide-y divide-white/5">
                         {filteredRiders.map((driver) => (
-                          <tr key={driver._id} className="hover:bg-white/5 transition-colors">
+                          <tr
+                            key={driver._id}
+                            className="hover:bg-white/5 transition-colors"
+                          >
                             <td
-                              onClick={() => setSelectedProfile({ type: "rider", data: driver })}
+                              onClick={() =>
+                                setSelectedProfile({
+                                  type: "rider",
+                                  data: driver,
+                                })
+                              }
                               className="py-4 px-4 flex items-center gap-3 font-semibold text-white cursor-pointer group"
                             >
                               <img
@@ -1209,7 +1610,8 @@ const Admin = () => {
                                     {driver.vehicle.make} {driver.vehicle.model}
                                   </p>
                                   <p className="text-xs text-gray-400">
-                                    {driver.vehicle.licensePlate} ({driver.vehicle.year})
+                                    {driver.vehicle.licensePlate} (
+                                    {driver.vehicle.year})
                                   </p>
                                 </div>
                               ) : (
@@ -1223,23 +1625,50 @@ const Admin = () => {
                               ৳{driver.earnings || 0}
                             </td>
                             <td className="py-4 px-4">
-                              {driver.isBlocked ? (
-                                <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase border bg-red-500/10 text-red-400 border-red-500/20">
-                                  Blocked
-                                </span>
-                              ) : (
-                                <span
-                                  className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase border ${
-                                    driver.isOnline
-                                      ? "bg-green-500/10 text-green-400 border-green-500/20"
-                                      : "bg-gray-500/10 text-gray-400 border-white/5"
-                                  }`}
-                                >
-                                  {driver.isOnline ? "Online" : "Offline"}
-                                </span>
-                              )}
+                              <div className="flex flex-col gap-1 items-start">
+                                {driver.isApproved ? (
+                                  <span className="inline-block px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+                                    Approved
+                                  </span>
+                                ) : (
+                                  <span className="inline-block px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase border bg-yellow-500/10 text-yellow-500 border-yellow-500/20 animate-pulse">
+                                    Pending Approval
+                                  </span>
+                                )}
+                                {driver.isBlocked ? (
+                                  <span className="inline-block px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase border bg-red-500/10 text-red-400 border-red-500/20">
+                                    Blocked
+                                  </span>
+                                ) : (
+                                  <span
+                                    className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase border ${
+                                      driver.isOnline
+                                        ? "bg-green-500/10 text-green-400 border-green-500/20"
+                                        : "bg-gray-500/10 text-gray-400 border-white/5"
+                                    }`}
+                                  >
+                                    {driver.isOnline ? "Online" : "Offline"}
+                                  </span>
+                                )}
+                              </div>
                             </td>
-                            <td className="py-4 px-4 text-right flex justify-end gap-2">
+                            <td className="py-4 px-4 text-right flex justify-end gap-2 items-center">
+                              {!driver.isApproved && (
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => handleApproveDriver(driver._id)}
+                                    className="px-3 py-1 bg-emerald-600/10 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded-lg text-xs font-bold transition border border-emerald-500/20"
+                                  >
+                                    Approve
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeclineDriver(driver._id)}
+                                    className="px-3 py-1 bg-yellow-600/10 hover:bg-yellow-600 text-yellow-500 hover:text-white rounded-lg text-xs font-bold transition border border-yellow-500/20"
+                                  >
+                                    Decline
+                                  </button>
+                                </div>
+                              )}
                               <button
                                 onClick={() => setSelectedDriverStats(driver)}
                                 className="px-3 py-1 bg-purple-600/10 hover:bg-purple-600 text-purple-400 hover:text-white rounded-lg text-xs font-bold transition border border-purple-500/20"
@@ -1247,29 +1676,25 @@ const Admin = () => {
                                 Stats & Reviews
                               </button>
                               <button
-                                onClick={() => setSelectedProfile({ type: "rider", data: driver })}
-                                className="px-3 py-1 bg-blue-600/10 hover:bg-blue-600 text-blue-400 hover:text-white rounded-lg text-xs font-bold transition border border-blue-500/20"
-                              >
-                                Edit Profile
-                              </button>
-                              <button
                                 onClick={() =>
-                                  setDeleteConfirm({
+                                  setSelectedProfile({
                                     type: "rider",
-                                    id: driver._id,
-                                    name: driver.name,
+                                    data: driver,
                                   })
                                 }
-                                className="px-3 py-1 bg-red-600/10 hover:bg-red-600 text-red-400 hover:text-white rounded-lg text-xs font-bold transition border border-red-500/20"
+                                className="px-3 py-1 bg-blue-600/10 hover:bg-blue-600 text-blue-400 hover:text-red rounded-lg text-xs font-bold transition border border-blue-500/20"
                               >
-                                Delete
+                                Edit Profile
                               </button>
                             </td>
                           </tr>
                         ))}
                         {filteredRiders.length === 0 && (
                           <tr>
-                            <td colSpan="6" className="text-center py-8 text-gray-500 font-semibold">
+                            <td
+                              colSpan="6"
+                              className="text-center py-8 text-gray-500 font-semibold"
+                            >
                               No drivers found matching search.
                             </td>
                           </tr>
@@ -1296,7 +1721,10 @@ const Admin = () => {
                       </thead>
                       <tbody className="divide-y divide-white/5">
                         {filteredRides.map((ride) => (
-                          <tr key={ride._id} className="hover:bg-white/5 transition-colors">
+                          <tr
+                            key={ride._id}
+                            className="hover:bg-white/5 transition-colors"
+                          >
                             <td className="py-4 px-4 font-mono text-xs text-gray-400">
                               {ride._id?.substring(18)}
                             </td>
@@ -1305,7 +1733,9 @@ const Admin = () => {
                             </td>
                             <td className="py-4 px-4 text-gray-300">
                               {ride.rider?.name || (
-                                <span className="text-gray-500 italic">Unassigned</span>
+                                <span className="text-gray-500 italic">
+                                  Unassigned
+                                </span>
                               )}
                             </td>
                             <td className="py-4 px-4 max-w-xs truncate text-xs text-gray-300">
@@ -1324,31 +1754,38 @@ const Admin = () => {
                             <td className="py-4 px-4">
                               <span
                                 className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase border ${
-                                  ride.status === "completed" && ride.paymentStatus === "completed"
+                                  ride.status === "completed" &&
+                                  ride.paymentStatus === "completed"
                                     ? "bg-green-500/10 text-green-400 border-green-500/20"
-                                    : ride.status === "completed" && ride.paymentStatus !== "completed"
+                                    : ride.status === "completed" &&
+                                        ride.paymentStatus !== "completed"
                                       ? "bg-blue-500/10 text-blue-400 border-blue-500/20 animate-pulse"
                                       : ride.status === "cancelled"
                                         ? "bg-red-500/10 text-red-400 border-red-500/20"
                                         : "bg-blue-500/10 text-blue-400 border-blue-500/20"
                                 }`}
                               >
-                                {ride.status === "completed" && ride.paymentStatus !== "completed"
+                                {ride.status === "completed" &&
+                                ride.paymentStatus !== "completed"
                                   ? "in progress"
                                   : ride.status}
                               </span>
                             </td>
                             <td className="py-4 px-4 text-right space-x-2">
-                              {ride.status === "completed" && ride.paymentStatus === "completed" && (
-                                <button
-                                  onClick={() =>
-                                    setReceiptConfig({ rideId: ride._id, autoAction: null })
-                                  }
-                                  className="px-3 py-1 bg-white/5 hover:bg-white/10 rounded-lg text-xs font-bold transition border border-white/10"
-                                >
-                                  Receipt
-                                </button>
-                              )}
+                              {ride.status === "completed" &&
+                                ride.paymentStatus === "completed" && (
+                                  <button
+                                    onClick={() =>
+                                      setReceiptConfig({
+                                        rideId: ride._id,
+                                        autoAction: null,
+                                      })
+                                    }
+                                    className="px-3 py-1 bg-white/5 hover:bg-white/10 rounded-lg text-xs font-bold transition border border-white/10"
+                                  >
+                                    Receipt
+                                  </button>
+                                )}
                               <button
                                 onClick={() =>
                                   setDeleteConfirm({
@@ -1366,7 +1803,10 @@ const Admin = () => {
                         ))}
                         {filteredRides.length === 0 && (
                           <tr>
-                            <td colSpan="7" className="text-center py-8 text-gray-500 font-semibold">
+                            <td
+                              colSpan="7"
+                              className="text-center py-8 text-gray-500 font-semibold"
+                            >
                               No rides found matching filters.
                             </td>
                           </tr>
@@ -1400,7 +1840,8 @@ const Admin = () => {
                               </span>
                               {rev.rating < 3 && (
                                 <span className="flex items-center gap-1.5 px-2 py-0.5 bg-red-500/10 text-red-500 border border-red-500/20 rounded-full text-[9px] font-black uppercase tracking-wider animate-pulse">
-                                  <span className="w-1.5 h-1.5 bg-red-500 rounded-full"></span> Alert
+                                  <span className="w-1.5 h-1.5 bg-red-500 rounded-full"></span>{" "}
+                                  Alert
                                 </span>
                               )}
                             </div>
@@ -1419,8 +1860,16 @@ const Admin = () => {
                               Passenger:{" "}
                               <span
                                 onClick={() => {
-                                  const fullUser = users.find((u) => String(u._id) === String(rev.user?._id)) || rev.user;
-                                  if (fullUser) setSelectedProfile({ type: "user", data: fullUser });
+                                  const fullUser =
+                                    users.find(
+                                      (u) =>
+                                        String(u._id) === String(rev.user?._id),
+                                    ) || rev.user;
+                                  if (fullUser)
+                                    setSelectedProfile({
+                                      type: "user",
+                                      data: fullUser,
+                                    });
                                 }}
                                 className="font-semibold text-white cursor-pointer hover:text-red-400 hover:underline transition-colors"
                               >
@@ -1431,8 +1880,17 @@ const Admin = () => {
                               Driver:{" "}
                               <span
                                 onClick={() => {
-                                  const fullRider = riders.find((r) => String(r._id) === String(rev.rider?._id)) || rev.rider;
-                                  if (fullRider) setSelectedProfile({ type: "rider", data: fullRider });
+                                  const fullRider =
+                                    riders.find(
+                                      (r) =>
+                                        String(r._id) ===
+                                        String(rev.rider?._id),
+                                    ) || rev.rider;
+                                  if (fullRider)
+                                    setSelectedProfile({
+                                      type: "rider",
+                                      data: fullRider,
+                                    });
                                 }}
                                 className="font-semibold text-white cursor-pointer hover:text-red-400 hover:underline transition-colors"
                               >
@@ -1440,18 +1898,6 @@ const Admin = () => {
                               </span>
                             </p>
                           </div>
-                          <button
-                            onClick={() =>
-                              setDeleteConfirm({
-                                type: "review",
-                                id: rev._id,
-                                name: `Review by ${rev.user?.name || "user"}`,
-                              })
-                            }
-                            className="px-2.5 py-1 bg-red-600/10 hover:bg-red-600 text-red-400 hover:text-white rounded-lg text-xs font-bold transition border border-red-500/20"
-                          >
-                            Delete
-                          </button>
                         </div>
                       </div>
                     ))}
@@ -1475,9 +1921,15 @@ const Admin = () => {
             <div className="w-12 h-12 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
               <span className="text-2xl text-red-500">🗑️</span>
             </div>
-            <h3 className="text-xl font-black text-white mb-2">Delete Confirmation</h3>
+            <h3 className="text-xl font-black text-white mb-2">
+              Delete Confirmation
+            </h3>
             <p className="text-gray-400 text-sm mb-6">
-              Are you sure you want to delete <span className="font-bold text-white">"{deleteConfirm.name}"</span>? This action is permanent and cannot be undone.
+              Are you sure you want to delete{" "}
+              <span className="font-bold text-white">
+                "{deleteConfirm.name}"
+              </span>
+              ? This action is permanent and cannot be undone.
             </p>
             <div className="flex gap-4">
               <button
@@ -1507,21 +1959,27 @@ const Admin = () => {
             >
               ✕
             </button>
-            
+
             <div className="flex flex-col items-center mb-6 border-b border-white/5 pb-4">
               <img
                 src={selectedProfile.data.profilePicture || DEFAULT_AVATAR}
                 alt={selectedProfile.data.name}
                 className={`w-24 h-24 rounded-full object-cover border-4 ${
-                  selectedProfile.data.isBlocked ? "border-red-500" : "border-emerald-500"
+                  selectedProfile.data.isBlocked
+                    ? "border-red-500"
+                    : "border-emerald-500"
                 } shadow-lg mb-3`}
                 onError={(e) => {
                   e.target.src = DEFAULT_AVATAR;
                 }}
               />
-              <h3 className="text-2xl font-black text-white">{selectedProfile.data.name}</h3>
+              <h3 className="text-2xl font-black text-white">
+                {selectedProfile.data.name}
+              </h3>
               <p className="text-xs text-gray-400 uppercase tracking-widest font-bold mt-1">
-                {selectedProfile.type === "user" ? "Passenger Profile" : "Driver Profile"}
+                {selectedProfile.type === "user"
+                  ? "Passenger Profile"
+                  : "Driver Profile"}
               </p>
               {selectedProfile.data.isBlocked && (
                 <span className="mt-2 px-3 py-1 bg-red-500/20 text-red-400 border border-red-500/30 rounded-full text-xs font-black uppercase tracking-wider animate-pulse">
@@ -1532,309 +1990,475 @@ const Admin = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start mt-6">
               <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                const formData = new FormData(e.target);
-                const type = selectedProfile.type;
-                const id = selectedProfile.data._id;
-                
-                const payload = {
-                  name: formData.get("name"),
-                  email: formData.get("email"),
-                  phone: formData.get("phone"),
-                  isBlocked: formData.get("isBlocked") === "true",
-                };
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  const formData = new FormData(e.target);
+                  const type = selectedProfile.type;
+                  const id = selectedProfile.data._id;
 
-                if (type === "user") {
-                  payload.role = formData.get("role");
-                } else if (type === "rider") {
-                  payload.vehicle = {
-                    make: formData.get("vehicleMake"),
-                    model: formData.get("vehicleModel"),
-                    year: formData.get("vehicleYear"),
-                    licensePlate: formData.get("vehicleLicensePlate"),
+                  const payload = {
+                    name: formData.get("name"),
+                    email: formData.get("email"),
+                    phone: formData.get("phone"),
+                    isBlocked: formData.get("isBlocked") === "true",
                   };
-                }
 
-                try {
-                  const endpoint = type === "user" ? `/users/${id}` : `/riders/${id}`;
-                  const { data } = await axios.put(`${API_URL}${endpoint}`, payload, authHeaders());
-                  
-                  // Update state
                   if (type === "user") {
-                    setUsers(users.map((u) => (u._id === id ? data : u)));
-                  } else {
-                    setRiders(riders.map((r) => (r._id === id ? data : r)));
+                    payload.role = formData.get("role");
+                  } else if (type === "rider") {
+                    payload.isApproved = formData.get("isApproved") === "true";
+                    payload.vehicle = {
+                      make: formData.get("vehicleMake"),
+                      model: formData.get("vehicleModel"),
+                      year: formData.get("vehicleYear"),
+                      licensePlate: formData.get("vehicleLicensePlate"),
+                    };
                   }
-                  
-                  fetchStats();
-                  setSelectedProfile(null);
-                } catch (err) {
-                  alert(err.response?.data?.message || "Failed to update profile.");
-                }
-              }}
-              className="space-y-4"
-            >
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Full Name</label>
-                  <input
-                    type="text"
-                    name="name"
-                    defaultValue={selectedProfile.data.name}
-                    required
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-semibold focus:outline-none focus:border-red-500 transition text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Email Address</label>
-                  <input
-                    type="email"
-                    name="email"
-                    defaultValue={selectedProfile.data.email}
-                    required
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-semibold focus:outline-none focus:border-red-500 transition text-sm"
-                  />
-                </div>
-              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Phone Number</label>
-                  <input
-                    type="text"
-                    name="phone"
-                    defaultValue={selectedProfile.data.phone || ""}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-semibold focus:outline-none focus:border-red-500 transition text-sm"
-                  />
-                </div>
+                  try {
+                    const endpoint =
+                      type === "user" ? `/users/${id}` : `/riders/${id}`;
+                    const { data } = await axios.put(
+                      `${API_URL}${endpoint}`,
+                      payload,
+                      authHeaders(),
+                    );
 
-                {selectedProfile.type === "user" ? (
+                    // Update state
+                    if (type === "user") {
+                      setUsers(users.map((u) => (u._id === id ? data : u)));
+                    } else {
+                      setRiders(riders.map((r) => (r._id === id ? data : r)));
+                    }
+
+                    fetchStats();
+                    setSelectedProfile(null);
+                  } catch (err) {
+                    alert(
+                      err.response?.data?.message ||
+                        "Failed to update profile.",
+                    );
+                  }
+                }}
+                className="space-y-4"
+              >
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Role</label>
-                    <select
-                      name="role"
-                      defaultValue={selectedProfile.data.role}
-                      disabled={selectedProfile.data._id === user._id}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-semibold focus:outline-none focus:border-red-500 transition text-sm disabled:opacity-50"
-                    >
-                      <option value="user" className="bg-gray-900 text-white">User</option>
-                      <option value="admin" className="bg-gray-900 text-white">Admin</option>
-                    </select>
-                  </div>
-                ) : (
-                  <div>
-                    <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Vehicle License Plate</label>
+                    <label className="block text-xs font-bold text-gray-400 uppercase mb-1">
+                      Full Name
+                    </label>
                     <input
                       type="text"
-                      name="vehicleLicensePlate"
-                      defaultValue={selectedProfile.data.vehicle?.licensePlate || ""}
+                      name="name"
+                      defaultValue={selectedProfile.data.name}
+                      required
                       className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-semibold focus:outline-none focus:border-red-500 transition text-sm"
                     />
                   </div>
-                )}
-              </div>
-
-              {selectedProfile.type === "rider" && (
-                <div className="grid grid-cols-3 gap-2 border-t border-white/5 pt-3">
                   <div>
-                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Make</label>
+                    <label className="block text-xs font-bold text-gray-400 uppercase mb-1">
+                      Email Address
+                    </label>
                     <input
-                      type="text"
-                      name="vehicleMake"
-                      defaultValue={selectedProfile.data.vehicle?.make || ""}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white font-semibold focus:outline-none focus:border-red-500 transition text-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Model</label>
-                    <input
-                      type="text"
-                      name="vehicleModel"
-                      defaultValue={selectedProfile.data.vehicle?.model || ""}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white font-semibold focus:outline-none focus:border-red-500 transition text-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Year</label>
-                    <input
-                      type="text"
-                      name="vehicleYear"
-                      defaultValue={selectedProfile.data.vehicle?.year || ""}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white font-semibold focus:outline-none focus:border-red-500 transition text-xs"
+                      type="email"
+                      name="email"
+                      defaultValue={selectedProfile.data.email}
+                      required
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-semibold focus:outline-none focus:border-red-500 transition text-sm"
                     />
                   </div>
                 </div>
-              )}
 
-              {/* Status / Block Option */}
-              <div className="border-t border-white/5 pt-4">
-                <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Account Status</label>
-                <div className="flex items-center gap-4 bg-white/5 border border-white/10 p-3 rounded-2xl">
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-white">Block Account Access</p>
-                    <p className="text-xs text-gray-400">Prevent this account from registering, logging in, or requesting/taking rides.</p>
-                  </div>
-                  <select
-                    name="isBlocked"
-                    defaultValue={selectedProfile.data.isBlocked ? "true" : "false"}
-                    disabled={selectedProfile.data._id === user._id}
-                    className={`px-3 py-1.5 rounded-xl border text-xs font-extrabold uppercase focus:outline-none transition ${
-                      selectedProfile.data.isBlocked
-                        ? "bg-red-500/10 text-red-400 border-red-500/20"
-                        : "bg-green-500/10 text-green-400 border-green-500/20"
-                    }`}
-                  >
-                    <option value="false" className="bg-gray-900 text-white">Active</option>
-                    <option value="true" className="bg-gray-900 text-white">Blocked</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* User Statistics & Quick Call */}
-              <div className="border-t border-white/5 pt-4 space-y-3">
-                <h4 className="text-xs font-bold text-gray-400 uppercase">Activity & Statistics</h4>
-                <div className="grid grid-cols-3 gap-3 bg-white/5 p-3 rounded-2xl border border-white/10 text-center">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <p className="text-[10px] text-gray-400 uppercase font-bold">Total Rides</p>
-                    <p className="text-lg font-black text-white">
-                      {selectedProfile.type === "user"
-                        ? rides.filter(r => r.user && String(r.user._id || r.user) === String(selectedProfile.data._id)).length
-                        : rides.filter(r => r.rider && String(r.rider._id || r.rider) === String(selectedProfile.data._id)).length
-                      }
-                    </p>
+                    <label className="block text-xs font-bold text-gray-400 uppercase mb-1">
+                      Phone Number
+                    </label>
+                    <input
+                      type="text"
+                      name="phone"
+                      defaultValue={selectedProfile.data.phone || ""}
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-semibold focus:outline-none focus:border-red-500 transition text-sm"
+                    />
                   </div>
-                  <div>
-                    <p className="text-[10px] text-gray-400 uppercase font-bold">Completed</p>
-                    <p className="text-lg font-black text-emerald-400">
-                      {selectedProfile.type === "user"
-                        ? rides.filter(r => r.user && String(r.user._id || r.user) === String(selectedProfile.data._id) && r.status === "completed" && r.paymentStatus === "completed").length
-                        : rides.filter(r => r.rider && String(r.rider._id || r.rider) === String(selectedProfile.data._id) && r.status === "completed" && r.paymentStatus === "completed").length
-                      }
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-gray-400 uppercase font-bold">Cancelled</p>
-                    <p className="text-lg font-black text-red-400">
-                      {selectedProfile.type === "user"
-                        ? rides.filter(r => r.user && String(r.user._id || r.user) === String(selectedProfile.data._id) && r.status === "cancelled").length
-                        : rides.filter(r => r.rider && String(r.rider._id || r.rider) === String(selectedProfile.data._id) && r.status === "cancelled").length
-                      }
-                    </p>
-                  </div>
-                </div>
-                
-                {selectedProfile.type === "user" ? (
-                  <div className="flex justify-between items-center bg-blue-500/5 border border-blue-500/10 p-3 rounded-xl text-sm">
-                    <span className="text-gray-400 font-semibold">Total Amount Spent:</span>
-                    <span className="font-extrabold text-blue-400">
-                      ৳{rides
-                        .filter(r => r.user && String(r.user._id || r.user) === String(selectedProfile.data._id) && r.status === "completed" && r.paymentStatus === "completed")
-                        .reduce((sum, r) => sum + (r.fare || 0), 0)
-                      }
-                    </span>
-                  </div>
-                ) : (
-                  <div className="flex justify-between items-center bg-emerald-500/5 border border-emerald-500/10 p-3 rounded-xl text-sm">
-                    <span className="text-gray-400 font-semibold">Total Earnings / Rating:</span>
-                    <span className="font-extrabold text-emerald-400">
-                      ৳{selectedProfile.data.earnings || 0} | ⭐{selectedProfile.data.rating?.toFixed(1) || "5.0"}
-                    </span>
-                  </div>
-                )}
 
-                {selectedProfile.data.phone ? (
-                  <a
-                    href={`tel:${selectedProfile.data.phone}`}
-                    className="flex items-center justify-center gap-2 w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-sm transition shadow-lg shadow-emerald-600/20 mt-1"
-                  >
-                    📞 Call {selectedProfile.data.name} ({selectedProfile.data.phone})
-                  </a>
-                ) : (
-                  <div className="text-center text-xs text-gray-500 py-1 font-semibold">
-                    No phone number available to call.
-                  </div>
-                )}
-              </div>
-
-              {/* Action buttons */}
-              <div className="flex gap-4 pt-4 border-t border-white/5">
-                <button
-                  type="button"
-                  onClick={() => setSelectedProfile(null)}
-                  className="flex-1 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-semibold transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2.5 bg-red-600 hover:bg-red-500 rounded-xl text-sm font-bold text-white transition shadow-lg shadow-red-500/20"
-                >
-                  Save Changes
-                </button>
-              </div>
-            </form>
-
-            {/* Right Column: Ride History */}
-            <div className="flex flex-col h-full border-t md:border-t-0 md:border-l border-white/5 pt-6 md:pt-0 md:pl-6">
-              <h3 className="text-xs font-bold text-gray-400 uppercase mb-3 tracking-wider">Ride History</h3>
-              <div className="flex-1 overflow-y-auto max-h-[500px] space-y-3 pr-2 scrollbar-thin scrollbar-thumb-white/10">
-                {(() => {
-                  const profileRides = rides.filter(r => {
-                    if (selectedProfile.type === "user") {
-                      return r.user && String(r.user._id || r.user) === String(selectedProfile.data._id);
-                    } else {
-                      return r.rider && String(r.rider._id || r.rider) === String(selectedProfile.data._id);
-                    }
-                  });
-
-                  if (profileRides.length === 0) {
-                    return (
-                      <div className="text-center text-xs text-gray-500 py-12 font-medium bg-white/5 rounded-2xl border border-dashed border-white/10">
-                        No rides found in history.
-                      </div>
-                    );
-                  }
-
-                  return profileRides.map(ride => (
-                    <div key={ride._id} className="bg-white/5 border border-white/5 rounded-xl p-3 text-xs flex flex-col justify-between hover:border-white/10 transition-colors">
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="font-mono text-[9px] text-gray-400">ID: {ride._id?.substring(18)}</span>
-                        <span className={`px-2 py-0.5 rounded text-[8px] font-extrabold uppercase border ${
-                          ride.status === "completed" && ride.paymentStatus === "completed"
-                            ? "bg-green-500/10 text-green-400 border-green-500/20"
-                            : ride.status === "completed" && ride.paymentStatus !== "completed"
-                              ? "bg-blue-500/10 text-blue-400 border-blue-500/20 animate-pulse"
-                              : ride.status === "cancelled"
-                                ? "bg-red-500/10 text-red-400 border-red-500/20"
-                                : "bg-blue-500/10 text-blue-400 border-blue-500/20"
-                        }`}>
-                          {ride.status === "completed" && ride.paymentStatus !== "completed"
-                            ? "in progress"
-                            : ride.status}
-                        </span>
-                      </div>
-                      <div className="space-y-1 text-gray-300">
-                        <p className="truncate">🟢 <span className="font-semibold text-gray-400">Pickup:</span> {ride.pickupLocation?.address || "Coordinates"}</p>
-                        <p className="truncate">🔴 <span className="font-semibold text-gray-400">Dropoff:</span> {ride.dropoffLocation?.address || "Coordinates"}</p>
-                      </div>
-                      <div className="flex justify-between items-center mt-3 pt-2 border-t border-white/5 text-[9px]">
-                        <span className="text-gray-400 text-left">
-                          {selectedProfile.type === "user" 
-                            ? `Driver: ${ride.rider?.name || "Unassigned"}` 
-                            : `Passenger: ${ride.user?.name || "Unknown"}`
-                          }
-                        </span>
-                        <span className="font-extrabold text-green-400 text-xs">৳{ride.fare}</span>
-                      </div>
+                  {selectedProfile.type === "user" ? (
+                    <div>
+                      <label className="block text-xs font-bold text-gray-400 uppercase mb-1">
+                        Role
+                      </label>
+                      <select
+                        name="role"
+                        defaultValue={selectedProfile.data.role}
+                        disabled={selectedProfile.data._id === user._id}
+                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-semibold focus:outline-none focus:border-red-500 transition text-sm disabled:opacity-50"
+                      >
+                        <option value="user" className="bg-gray-900 text-white">
+                          User
+                        </option>
+                        <option
+                          value="admin"
+                          className="bg-gray-900 text-white"
+                        >
+                          Admin
+                        </option>
+                      </select>
                     </div>
-                  ));
-                })()}
+                  ) : (
+                    <div>
+                      <label className="block text-xs font-bold text-gray-400 uppercase mb-1">
+                        Vehicle License Plate
+                      </label>
+                      <input
+                        type="text"
+                        name="vehicleLicensePlate"
+                        defaultValue={
+                          selectedProfile.data.vehicle?.licensePlate || ""
+                        }
+                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-semibold focus:outline-none focus:border-red-500 transition text-sm"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {selectedProfile.type === "rider" && (
+                  <div className="grid grid-cols-3 gap-2 border-t border-white/5 pt-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">
+                        Make
+                      </label>
+                      <input
+                        type="text"
+                        name="vehicleMake"
+                        defaultValue={selectedProfile.data.vehicle?.make || ""}
+                        className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white font-semibold focus:outline-none focus:border-red-500 transition text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">
+                        Model
+                      </label>
+                      <input
+                        type="text"
+                        name="vehicleModel"
+                        defaultValue={selectedProfile.data.vehicle?.model || ""}
+                        className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white font-semibold focus:outline-none focus:border-red-500 transition text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">
+                        Year
+                      </label>
+                      <input
+                        type="text"
+                        name="vehicleYear"
+                        defaultValue={selectedProfile.data.vehicle?.year || ""}
+                        className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white font-semibold focus:outline-none focus:border-red-500 transition text-xs"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Status / Block Option */}
+                <div className="border-t border-white/5 pt-4 space-y-4">
+                  <label className="block text-xs font-bold text-gray-400 uppercase mb-2">
+                    Account Status
+                  </label>
+                  <div className="flex items-center gap-4 bg-white/5 border border-white/10 p-3 rounded-2xl">
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-white">
+                        Block Account Access
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        Prevent this account from registering, logging in, or
+                        requesting/taking rides.
+                      </p>
+                    </div>
+                    <select
+                      name="isBlocked"
+                      defaultValue={
+                        selectedProfile.data.isBlocked ? "true" : "false"
+                      }
+                      disabled={selectedProfile.data._id === user._id}
+                      className={`px-3 py-1.5 rounded-xl border text-xs font-extrabold uppercase focus:outline-none transition ${
+                        selectedProfile.data.isBlocked
+                          ? "bg-red-500/10 text-red-400 border-red-500/20"
+                          : "bg-green-500/10 text-green-400 border-green-500/20"
+                      }`}
+                    >
+                      <option value="false" className="bg-gray-900 text-white">
+                        Active
+                      </option>
+                      <option value="true" className="bg-gray-900 text-white">
+                        Blocked
+                      </option>
+                    </select>
+                  </div>
+
+                  {selectedProfile.type === "rider" && (
+                    <div className="flex items-center gap-4 bg-white/5 border border-white/10 p-3 rounded-2xl">
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-white">
+                          Driver Registration Approval
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          Approve or reject this driver's registration to allow them to log in.
+                        </p>
+                      </div>
+                      <select
+                        name="isApproved"
+                        defaultValue={
+                          selectedProfile.data.isApproved ? "true" : "false"
+                        }
+                        disabled={selectedProfile.data.isApproved}
+                        className={`px-3 py-1.5 rounded-xl border text-xs font-extrabold uppercase focus:outline-none transition ${
+                          selectedProfile.data.isApproved
+                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                            : "bg-yellow-500/10 text-yellow-500 border-yellow-500/20"
+                        }`}
+                      >
+                        <option value="false" className="bg-gray-900 text-white">
+                          Pending
+                        </option>
+                        <option value="true" className="bg-gray-900 text-white">
+                          Approved
+                        </option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+                {/* User Statistics & Quick Call */}
+                <div className="border-t border-white/5 pt-4 space-y-3">
+                  <h4 className="text-xs font-bold text-gray-400 uppercase">
+                    Activity & Statistics
+                  </h4>
+                  <div className="grid grid-cols-3 gap-3 bg-white/5 p-3 rounded-2xl border border-white/10 text-center">
+                    <div>
+                      <p className="text-[10px] text-gray-400 uppercase font-bold">
+                        Total Rides
+                      </p>
+                      <p className="text-lg font-black text-white">
+                        {selectedProfile.type === "user"
+                          ? rides.filter(
+                              (r) =>
+                                r.user &&
+                                String(r.user._id || r.user) ===
+                                  String(selectedProfile.data._id),
+                            ).length
+                          : rides.filter(
+                              (r) =>
+                                r.rider &&
+                                String(r.rider._id || r.rider) ===
+                                  String(selectedProfile.data._id),
+                            ).length}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-gray-400 uppercase font-bold">
+                        Completed
+                      </p>
+                      <p className="text-lg font-black text-emerald-400">
+                        {selectedProfile.type === "user"
+                          ? rides.filter(
+                              (r) =>
+                                r.user &&
+                                String(r.user._id || r.user) ===
+                                  String(selectedProfile.data._id) &&
+                                r.status === "completed" &&
+                                r.paymentStatus === "completed",
+                            ).length
+                          : rides.filter(
+                              (r) =>
+                                r.rider &&
+                                String(r.rider._id || r.rider) ===
+                                  String(selectedProfile.data._id) &&
+                                r.status === "completed" &&
+                                r.paymentStatus === "completed",
+                            ).length}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-gray-400 uppercase font-bold">
+                        Cancelled
+                      </p>
+                      <p className="text-lg font-black text-red-400">
+                        {selectedProfile.type === "user"
+                          ? rides.filter(
+                              (r) =>
+                                r.user &&
+                                String(r.user._id || r.user) ===
+                                  String(selectedProfile.data._id) &&
+                                r.status === "cancelled",
+                            ).length
+                          : rides.filter(
+                              (r) =>
+                                r.rider &&
+                                String(r.rider._id || r.rider) ===
+                                  String(selectedProfile.data._id) &&
+                                r.status === "cancelled",
+                            ).length}
+                      </p>
+                    </div>
+                  </div>
+
+                  {selectedProfile.type === "user" ? (
+                    <div className="flex justify-between items-center bg-blue-500/5 border border-blue-500/10 p-3 rounded-xl text-sm">
+                      <span className="text-gray-400 font-semibold">
+                        Total Amount Spent:
+                      </span>
+                      <span className="font-extrabold text-blue-400">
+                        ৳
+                        {rides
+                          .filter(
+                            (r) =>
+                              r.user &&
+                              String(r.user._id || r.user) ===
+                                String(selectedProfile.data._id) &&
+                              r.status === "completed" &&
+                              r.paymentStatus === "completed",
+                          )
+                          .reduce((sum, r) => sum + (r.fare || 0), 0)}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex justify-between items-center bg-emerald-500/5 border border-emerald-500/10 p-3 rounded-xl text-sm">
+                      <span className="text-gray-400 font-semibold">
+                        Total Earnings / Rating:
+                      </span>
+                      <span className="font-extrabold text-emerald-400">
+                        ৳{selectedProfile.data.earnings || 0} | ⭐
+                        {selectedProfile.data.rating?.toFixed(1) || "5.0"}
+                      </span>
+                    </div>
+                  )}
+
+                  {selectedProfile.data.phone ? (
+                    <a
+                      href={`tel:${selectedProfile.data.phone}`}
+                      className="flex items-center justify-center gap-2 w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-sm transition shadow-lg shadow-emerald-600/20 mt-1"
+                    >
+                      📞 Call {selectedProfile.data.name} (
+                      {selectedProfile.data.phone})
+                    </a>
+                  ) : (
+                    <div className="text-center text-xs text-gray-500 py-1 font-semibold">
+                      No phone number available to call.
+                    </div>
+                  )}
+                </div>
+
+                {/* Action buttons */}
+                <div className="flex gap-4 pt-4 border-t border-white/5">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedProfile(null)}
+                    className="flex-1 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-semibold transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 py-2.5 bg-red-600 hover:bg-red-500 rounded-xl text-sm font-bold text-white transition shadow-lg shadow-red-500/20"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </form>
+
+              {/* Right Column: Ride History */}
+              <div className="flex flex-col h-full border-t md:border-t-0 md:border-l border-white/5 pt-6 md:pt-0 md:pl-6">
+                <h3 className="text-xs font-bold text-gray-400 uppercase mb-3 tracking-wider">
+                  Ride History
+                </h3>
+                <div className="flex-1 overflow-y-auto max-h-[500px] space-y-3 pr-2 scrollbar-thin scrollbar-thumb-white/10">
+                  {(() => {
+                    const profileRides = rides.filter((r) => {
+                      if (selectedProfile.type === "user") {
+                        return (
+                          r.user &&
+                          String(r.user._id || r.user) ===
+                            String(selectedProfile.data._id)
+                        );
+                      } else {
+                        return (
+                          r.rider &&
+                          String(r.rider._id || r.rider) ===
+                            String(selectedProfile.data._id)
+                        );
+                      }
+                    });
+
+                    if (profileRides.length === 0) {
+                      return (
+                        <div className="text-center text-xs text-gray-500 py-12 font-medium bg-white/5 rounded-2xl border border-dashed border-white/10">
+                          No rides found in history.
+                        </div>
+                      );
+                    }
+
+                    return profileRides.map((ride) => (
+                      <div
+                        key={ride._id}
+                        className="bg-white/5 border border-white/5 rounded-xl p-3 text-xs flex flex-col justify-between hover:border-white/10 transition-colors"
+                      >
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="font-mono text-[9px] text-gray-400">
+                            ID: {ride._id?.substring(18)}
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded text-[8px] font-extrabold uppercase border ${
+                              ride.status === "completed" &&
+                              ride.paymentStatus === "completed"
+                                ? "bg-green-500/10 text-green-400 border-green-500/20"
+                                : ride.status === "completed" &&
+                                    ride.paymentStatus !== "completed"
+                                  ? "bg-blue-500/10 text-blue-400 border-blue-500/20 animate-pulse"
+                                  : ride.status === "cancelled"
+                                    ? "bg-red-500/10 text-red-400 border-red-500/20"
+                                    : "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                            }`}
+                          >
+                            {ride.status === "completed" &&
+                            ride.paymentStatus !== "completed"
+                              ? "in progress"
+                              : ride.status}
+                          </span>
+                        </div>
+                        <div className="space-y-1 text-gray-300">
+                          <p className="truncate">
+                            🟢{" "}
+                            <span className="font-semibold text-gray-400">
+                              Pickup:
+                            </span>{" "}
+                            {ride.pickupLocation?.address || "Coordinates"}
+                          </p>
+                          <p className="truncate">
+                            🔴{" "}
+                            <span className="font-semibold text-gray-400">
+                              Dropoff:
+                            </span>{" "}
+                            {ride.dropoffLocation?.address || "Coordinates"}
+                          </p>
+                        </div>
+                        <div className="flex justify-between items-center mt-3 pt-2 border-t border-white/5 text-[9px]">
+                          <span className="text-gray-400 text-left">
+                            {selectedProfile.type === "user"
+                              ? `Driver: ${ride.rider?.name || "Unassigned"}`
+                              : `Passenger: ${ride.user?.name || "Unknown"}`}
+                          </span>
+                          <span className="font-extrabold text-green-400 text-xs">
+                            ৳{ride.fare}
+                          </span>
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
       )}
 
       {/* Print Month Selection Modal */}
@@ -1843,7 +2467,9 @@ const Admin = () => {
           <div className="bg-gray-900 border border-white/10 rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl relative animate-fade-in-up">
             <div className="p-6 border-b border-white/5">
               <h2 className="text-xl font-black text-white">Select Month</h2>
-              <p className="text-xs text-gray-400 mt-1">Choose a month to generate a detailed report.</p>
+              <p className="text-xs text-gray-400 mt-1">
+                Choose a month to generate a detailed report.
+              </p>
             </div>
             <div className="p-6">
               <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
@@ -1884,67 +2510,126 @@ const Admin = () => {
                   src={selectedDriverStats.profilePicture || DEFAULT_AVATAR}
                   alt={selectedDriverStats.name}
                   className="w-14 h-14 rounded-full object-cover border-2 border-white/10 bg-gray-800"
-                  onError={(e) => { e.target.src = DEFAULT_AVATAR; }}
+                  onError={(e) => {
+                    e.target.src = DEFAULT_AVATAR;
+                  }}
                 />
                 <div>
-                  <h2 className="text-xl font-black text-white">{selectedDriverStats.name}</h2>
-                  <p className="text-xs text-gray-400 mt-1">{selectedDriverStats.email} • {selectedDriverStats.phone}</p>
+                  <h2 className="text-xl font-black text-white">
+                    {selectedDriverStats.name}
+                  </h2>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {selectedDriverStats.email} • {selectedDriverStats.phone}
+                  </p>
                 </div>
               </div>
-              <button onClick={() => setSelectedDriverStats(null)} className="p-2 hover:bg-white/10 rounded-xl transition text-gray-400 hover:text-white">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              <button
+                onClick={() => setSelectedDriverStats(null)}
+                className="p-2 hover:bg-white/10 rounded-xl transition text-gray-400 hover:text-white"
+              >
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
               </button>
             </div>
-            
+
             <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-thin scrollbar-thumb-white/10">
               {/* High Level Stats */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="bg-white/5 border border-white/10 rounded-2xl p-4 text-center flex flex-col items-center justify-center">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Total Earnings</p>
-                  <p className="text-xl font-black text-green-400">৳{selectedDriverStats.earnings || 0}</p>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">
+                    Total Earnings
+                  </p>
+                  <p className="text-xl font-black text-green-400">
+                    ৳{selectedDriverStats.earnings || 0}
+                  </p>
                 </div>
                 <div className="bg-white/5 border border-white/10 rounded-2xl p-4 text-center flex flex-col items-center justify-center">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Avg Rating</p>
-                  <p className="text-xl font-black text-yellow-400">⭐ {selectedDriverStats.rating || 0}</p>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">
+                    Avg Rating
+                  </p>
+                  <p className="text-xl font-black text-yellow-400">
+                    ⭐ {selectedDriverStats.rating || 0}
+                  </p>
                 </div>
                 <div className="bg-white/5 border border-white/10 rounded-2xl p-4 text-center flex flex-col items-center justify-center">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Vehicle</p>
-                  <p className="text-sm font-bold text-white mt-1 truncate max-w-[120px]">{selectedDriverStats.vehicleDetails?.model || "N/A"}</p>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">
+                    Vehicle
+                  </p>
+                  <p className="text-sm font-bold text-white mt-1 truncate max-w-[120px]">
+                    {selectedDriverStats.vehicleDetails?.model || "N/A"}
+                  </p>
                 </div>
                 <div className="bg-white/5 border border-white/10 rounded-2xl p-4 text-center flex flex-col items-center justify-center">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Status</p>
-                  <p className={`text-sm font-black mt-1 ${selectedDriverStats.isBlocked ? 'text-red-400' : selectedDriverStats.isOnline ? 'text-green-400' : 'text-gray-400'}`}>
-                    {selectedDriverStats.isBlocked ? 'BLOCKED' : selectedDriverStats.isOnline ? 'ONLINE' : 'OFFLINE'}
+                  <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">
+                    Status
+                  </p>
+                  <p
+                    className={`text-sm font-black mt-1 ${selectedDriverStats.isBlocked ? "text-red-400" : selectedDriverStats.isOnline ? "text-green-400" : "text-gray-400"}`}
+                  >
+                    {selectedDriverStats.isBlocked
+                      ? "BLOCKED"
+                      : selectedDriverStats.isOnline
+                        ? "ONLINE"
+                        : "OFFLINE"}
                   </p>
                 </div>
               </div>
 
               {/* Reviews List */}
               <div>
-                <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4 border-b border-white/5 pb-2">Passenger Reviews</h3>
+                <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4 border-b border-white/5 pb-2">
+                  Passenger Reviews
+                </h3>
                 <div className="space-y-3">
                   {(() => {
-                    const driverReviews = reviews.filter(r => {
+                    const driverReviews = reviews.filter((r) => {
                       let isMatch = false;
-                      if (r.rider && String(r.rider._id || r.rider) === String(selectedDriverStats._id)) {
+                      if (
+                        r.rider &&
+                        String(r.rider._id || r.rider) ===
+                          String(selectedDriverStats._id)
+                      ) {
                         isMatch = true;
                       } else if (r.ride) {
-                        const rideMatch = rides.find(rd => String(rd._id) === String(r.ride._id || r.ride));
-                        if (rideMatch && rideMatch.rider && String(rideMatch.rider._id || rideMatch.rider) === String(selectedDriverStats._id)) {
+                        const rideMatch = rides.find(
+                          (rd) =>
+                            String(rd._id) === String(r.ride._id || r.ride),
+                        );
+                        if (
+                          rideMatch &&
+                          rideMatch.rider &&
+                          String(rideMatch.rider._id || rideMatch.rider) ===
+                            String(selectedDriverStats._id)
+                        ) {
                           isMatch = true;
                         }
                       }
-                      
-                      const isByPassenger = r.reviewBy !== 'rider';
+
+                      const isByPassenger = r.reviewBy !== "rider";
                       return isMatch && isByPassenger;
                     });
-                    
+
                     if (driverReviews.length === 0) {
-                      return <div className="text-center py-8 text-gray-500 text-sm italic bg-white/5 rounded-2xl border border-white/5">No reviews from passengers yet.</div>;
+                      return (
+                        <div className="text-center py-8 text-gray-500 text-sm italic bg-white/5 rounded-2xl border border-white/5">
+                          No reviews from passengers yet.
+                        </div>
+                      );
                     }
 
                     const ratingCounts = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
-                    driverReviews.forEach(r => {
+                    driverReviews.forEach((r) => {
                       if (r.rating >= 1 && r.rating <= 5) {
                         ratingCounts[Math.floor(r.rating)]++;
                       }
@@ -1955,23 +2640,36 @@ const Admin = () => {
                       <>
                         {/* Rating Distribution Chart */}
                         <div className="bg-white/5 border border-white/10 rounded-2xl p-5 mb-6">
-                          <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3">Rating Breakdown</h4>
+                          <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3">
+                            Rating Breakdown
+                          </h4>
                           <div className="space-y-2.5">
-                            {[5, 4, 3, 2, 1].map(star => {
+                            {[5, 4, 3, 2, 1].map((star) => {
                               const count = ratingCounts[star];
-                              const percentage = totalReviews > 0 ? (count / totalReviews) * 100 : 0;
+                              const percentage =
+                                totalReviews > 0
+                                  ? (count / totalReviews) * 100
+                                  : 0;
                               return (
-                                <div key={star} className="flex items-center gap-3">
+                                <div
+                                  key={star}
+                                  className="flex items-center gap-3"
+                                >
                                   <div className="w-12 text-xs font-bold text-gray-400 flex items-center justify-end gap-1">
-                                    {star} <span className="text-yellow-500 text-[10px]">⭐</span>
+                                    {star}{" "}
+                                    <span className="text-yellow-500 text-[10px]">
+                                      ⭐
+                                    </span>
                                   </div>
                                   <div className="flex-1 h-2 bg-gray-800 rounded-full overflow-hidden border border-white/5">
-                                    <div 
-                                      className={`h-full rounded-full transition-all duration-1000 ${star >= 4 ? 'bg-green-500' : star === 3 ? 'bg-yellow-500' : 'bg-red-500'}`} 
+                                    <div
+                                      className={`h-full rounded-full transition-all duration-1000 ${star >= 4 ? "bg-green-500" : star === 3 ? "bg-yellow-500" : "bg-red-500"}`}
                                       style={{ width: `${percentage}%` }}
                                     ></div>
                                   </div>
-                                  <div className="w-8 text-xs font-bold text-gray-500">{count}</div>
+                                  <div className="w-8 text-xs font-bold text-gray-500">
+                                    {count}
+                                  </div>
                                 </div>
                               );
                             })}
@@ -1979,24 +2677,37 @@ const Admin = () => {
                         </div>
 
                         {/* Individual Reviews */}
-                        {driverReviews.map(r => (
-                      <div key={r._id} className="bg-white/5 border border-white/5 rounded-2xl p-4">
-                        <div className="flex justify-between items-start mb-2">
-                          <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center font-bold text-xs uppercase border border-blue-500/30">
-                              {r.user?.name ? r.user.name[0] : '?'}
+                        {driverReviews.map((r) => (
+                          <div
+                            key={r._id}
+                            className="bg-white/5 border border-white/5 rounded-2xl p-4"
+                          >
+                            <div className="flex justify-between items-start mb-2">
+                              <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center font-bold text-xs uppercase border border-blue-500/30">
+                                  {r.user?.name ? r.user.name[0] : "?"}
+                                </div>
+                                <div>
+                                  <p className="text-xs font-bold text-white">
+                                    {r.user?.name || "Unknown Passenger"}
+                                  </p>
+                                  <p className="text-[10px] text-gray-500">
+                                    {new Date(r.createdAt).toLocaleDateString()}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="bg-yellow-500/10 text-yellow-500 px-2 py-1 rounded-lg text-xs font-black border border-yellow-500/20">
+                                ⭐ {r.rating}
+                              </div>
                             </div>
-                            <div>
-                              <p className="text-xs font-bold text-white">{r.user?.name || "Unknown Passenger"}</p>
-                              <p className="text-[10px] text-gray-500">{new Date(r.createdAt).toLocaleDateString()}</p>
-                            </div>
+                            <p className="text-sm text-gray-300 ml-10">
+                              {r.comment || (
+                                <span className="italic text-gray-600">
+                                  No written comment provided.
+                                </span>
+                              )}
+                            </p>
                           </div>
-                          <div className="bg-yellow-500/10 text-yellow-500 px-2 py-1 rounded-lg text-xs font-black border border-yellow-500/20">
-                            ⭐ {r.rating}
-                          </div>
-                        </div>
-                        <p className="text-sm text-gray-300 ml-10">{r.comment || <span className="italic text-gray-600">No written comment provided.</span>}</p>
-                      </div>
                         ))}
                       </>
                     );

@@ -50,8 +50,13 @@ const Register = () => {
       const endpoint = type === 'rider' ? '/api/auth/register/rider' : '/api/auth/register/user';
       const { data } = await axios.post(`http://localhost:5003${endpoint}`, payload);
 
-      login(data);
-      navigate('/dashboard');
+      if (type === 'rider') {
+        alert('Registration submitted successfully! Your account is under review by transiQo. You can log in once approved.');
+        navigate('/login', { state: { pendingRider: { id: data._id, name: data.name } } });
+      } else {
+        login(data);
+        navigate('/dashboard');
+      }
     } catch (err) {
       setError(err.response?.data?.message || 'Registration failed. Please try again.');
     } finally {

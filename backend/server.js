@@ -25,8 +25,18 @@ connectDB().then(async () => {
       await admin.save();
       console.log("Admin account auto-seeded: admin@transiqo.com / admin123");
     }
+
+    // Auto-approve existing riders
+    const Rider = require("./models/Rider");
+    const result = await Rider.updateMany(
+      { isApproved: { $exists: false } },
+      { $set: { isApproved: true } }
+    );
+    if (result.modifiedCount > 0) {
+      console.log(`Updated ${result.modifiedCount} existing riders to be approved.`);
+    }
   } catch (err) {
-    console.error("Error auto-seeding admin:", err);
+    console.error("Error auto-seeding admin/riders:", err);
   }
 });
 

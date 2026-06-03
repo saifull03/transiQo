@@ -25,6 +25,10 @@ const protect = async (req, res, next) => {
       if (req.user.isBlocked) {
         return res.status(403).json({ message: 'Account is blocked. Please contact support.' });
       }
+
+      if (decoded.role === 'rider' && !req.user.isApproved) {
+        return res.status(403).json({ message: 'Your registration is under review by transiQo.' });
+      }
       
       req.user.role = decoded.role; // Attach role to req.user
 

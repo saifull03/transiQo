@@ -430,15 +430,31 @@ const updateRider = async (req, res) => {
       return res.status(404).json({ message: "Rider not found" });
     }
 
-    const { name, email, phone, vehicle, isBlocked } = req.body;
+    const { name, email, phone, vehicle, isBlocked, isApproved } = req.body;
 
     if (name !== undefined) rider.name = name;
     if (email !== undefined) rider.email = email;
     if (phone !== undefined) rider.phone = phone;
     if (vehicle !== undefined) rider.vehicle = vehicle;
     if (isBlocked !== undefined) rider.isBlocked = isBlocked;
+    if (isApproved !== undefined) rider.isApproved = isApproved;
 
     await rider.save();
+
+    const io = req.app.get("socketio");
+    if (io) {
+      if (isApproved === true) {
+        io.to(String(rider._id)).emit("registrationStatus", {
+          status: "approved",
+          message: "Your registration has been approved by transiQo!"
+        });
+      } else if (isApproved === false) {
+        io.to(String(rider._id)).emit("registrationStatus", {
+          status: "pending",
+          message: "Your registration has been declined/placed under review by transiQo."
+        });
+      }
+    }
 
     const updated = await Rider.findById(rider._id).select("-password");
     res.json(updated);

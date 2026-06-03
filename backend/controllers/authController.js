@@ -87,6 +87,20 @@ const login = async (req, res) => {
       return res.status(403).json({ message: "Your account is blocked. Please contact support." });
     }
 
+    if (rider && !rider.isApproved) {
+      const io = req.app.get("socketio");
+      if (io) {
+        io.to(String(rider._id)).emit("registrationStatus", {
+          status: "pending",
+          message: "Your registration is under review by transiQo."
+        });
+      }
+      return res.status(403).json({
+        message: "Your registration is under review by transiQo.",
+        riderId: rider._id
+      });
+    }
+
     if (rider && (await rider.matchPassword(password))) {
       res.json({
         _id: rider._id,

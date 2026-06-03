@@ -54,6 +54,10 @@ const riderSchema = new mongoose.Schema(
       type: Number,
       default: 5.0,
     },
+    isApproved: {
+      type: Boolean,
+      default: false,
+    },
     isBlocked: {
       type: Boolean,
       default: false,
